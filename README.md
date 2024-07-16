@@ -1,5 +1,7 @@
 ## Hi there 👋
 I am Diluka Sandeep
+
+![](https://komarev.com/ghpvc/?username=dsm98&color=green)
 <!--
 **dsm98/dsm98** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 
