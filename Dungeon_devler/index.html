@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description"
+        content="Dungeon Delver - An epic roguelike adventure game. Explore mysterious dungeons, lush forests, and scorching deserts!">
+    <meta name="theme-color" content="#0a0a0c">
+    <title>Dungeon Delver - Ultimate Edition</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔️</text></svg>">
+</head>
+
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer"></div>
+        <div id="log-container"></div>
+        <canvas id="minimap-container" width="120" height="90"></canvas>
+
+        <!-- Main Menu -->
+        <div id="main-menu" class="menu-screen" style="display:flex">
+            <div class="menu-header">
+                <div class="logo-icon">⚔️</div>
+                <h1>Dungeon Delver</h1>
+                <div class="subtitle">Ultimate Edition</div>
+            </div>
+
+            <div class="menu-section">
+                <h2>🗺️ Choose Your Adventure</h2>
+                <div class="mission-grid">
+                    <button class="mission-card forest" onclick="selectMission('forest')">
+                        <div class="mission-icon">🌲</div>
+                        <div class="mission-title">Ancient Forest</div>
+                        <div class="mission-desc">Beginner • Explore nature</div>
+                        <div class="mission-enemies">Slimes • Spiders • Treants</div>
+                    </button>
+                    <button class="mission-card desert" onclick="selectMission('desert')">
+                        <div class="mission-icon">🏜️</div>
+                        <div class="mission-title">Scorched Sands</div>
+                        <div class="mission-desc">Moderate • Deadly heat</div>
+                        <div class="mission-enemies">Scorpions • Mummies • Sandworms</div>
+                    </button>
+                    <button class="mission-card dungeon" onclick="selectMission('dungeon')">
+                        <div class="mission-icon">💀</div>
+                        <div class="mission-title">Dark Depths</div>
+                        <div class="mission-desc">Hard • Classic dungeon</div>
+                        <div class="mission-enemies">Skeletons • Ghosts • Demons</div>
+                    </button>
+                </div>
+            </div>
+
+            <div class="menu-buttons">
+                <button class="menu-btn secondary" onclick="showLeaderboard()">🏆 Leaderboard</button>
+                <button class="menu-btn secondary" onclick="showSettings()">⚙️ Settings</button>
+                <button class="menu-btn secondary" onclick="showShop()">🛒 Shop</button>
+            </div>
+
+            <div class="menu-footer">
+                <div class="total-coins">💰 Total Coins: <span id="total-coins">0</span></div>
+            </div>
+        </div>
+
+        <!-- Leaderboard -->
+        <div id="leaderboard-menu" class="menu-screen">
+            <h1>🏆 Leaderboard</h1>
+            <div class="subtitle">Top 10 Scores</div>
+            <div id="leaderboard-list" class="leaderboard-container"></div>
+            <button class="menu-btn secondary" onclick="hideLeaderboard()">← Back</button>
+        </div>
+
+        <!-- Settings -->
+        <div id="settings-menu" class="menu-screen">
+            <h1>⚙️ Settings</h1>
+            <div class="settings-container">
+                <div class="setting-row">
+                    <span>🔊 Sound Effects</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="sound-toggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <span>📳 Vibration</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="vibrate-toggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <span>🎨 Particles</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="particles-toggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+            <button class="menu-btn danger" onclick="clearData()">🗑️ Clear All Data</button>
+            <button class="menu-btn secondary" onclick="hideSettings()">← Back</button>
+        </div>
+
+        <!-- Shop -->
+        <div id="shop-menu" class="menu-screen">
+            <h1>🛒 Shop</h1>
+            <div class="subtitle">Spend your coins on permanent upgrades!</div>
+            <div class="shop-coins">💰 <span id="shop-coins">0</span></div>
+            <div class="shop-container">
+                <div class="shop-item" onclick="buyUpgrade('attack')">
+                    <div class="shop-icon">⚔️</div>
+                    <div class="shop-name">Attack Power</div>
+                    <div class="shop-desc">+2 Base Damage</div>
+                    <div class="shop-price">💰 50</div>
+                    <div class="shop-level">Level: <span id="attack-level">0</span></div>
+                </div>
+                <div class="shop-item" onclick="buyUpgrade('defense')">
+                    <div class="shop-icon">🛡️</div>
+                    <div class="shop-name">Defense Power</div>
+                    <div class="shop-desc">+10 Max HP</div>
+                    <div class="shop-price">💰 50</div>
+                    <div class="shop-level">Level: <span id="defense-level">0</span></div>
+                </div>
+                <div class="shop-item" onclick="buyUpgrade('dash')">
+                    <div class="shop-icon">💨</div>
+                    <div class="shop-name">Dash Attack</div>
+                    <div class="shop-desc">Press SPACE to dash</div>
+                    <div class="shop-price">💰 100</div>
+                    <div class="shop-level" id="dash-status">Not Owned</div>
+                </div>
+                <div class="shop-item" onclick="buyUpgrade('ranged')">
+                    <div class="shop-icon">🏹</div>
+                    <div class="shop-name">Ranged Attack</div>
+                    <div class="shop-desc">Press R to shoot</div>
+                    <div class="shop-price">💰 150</div>
+                    <div class="shop-level" id="ranged-status">Not Owned</div>
+                </div>
+            </div>
+            <button class="menu-btn secondary" onclick="hideShop()">← Back</button>
+        </div>
+
+        <!-- Game Over -->
+        <div id="game-over" class="menu-screen">
+            <h1>💀 You Died</h1>
+            <div class="subtitle">The darkness claims another soul...</div>
+            <button class="menu-btn btn-dungeon" onclick="resetGame()">⚔️ Try Again</button>
+            <button class="menu-btn secondary" onclick="showMainMenu()">🏠 Main Menu</button>
+        </div>
+
+        <!-- Mobile Controls -->
+        <div id="controls">
+            <div class="dpad">
+                <div class="btn btn-up" data-key="ArrowUp">▲</div>
+                <div class="btn btn-left" data-key="ArrowLeft">◀</div>
+                <div class="btn btn-down" data-key="ArrowDown">▼</div>
+                <div class="btn btn-right" data-key="ArrowRight">▶</div>
+            </div>
+            <div class="action-buttons">
+                <div class="action-btn" id="dash-btn" onclick="game.dashAttack()" style="display:none;">💨</div>
+                <div class="action-btn" id="ranged-btn" onclick="game.rangedAttack()" style="display:none;">🏹</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        // Menu functions
+        function showLeaderboard() {
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('leaderboard-menu').style.display = 'flex';
+            renderLeaderboard();
+        }
+        function hideLeaderboard() {
+            document.getElementById('leaderboard-menu').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'flex';
+        }
+        function showSettings() {
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('settings-menu').style.display = 'flex';
+        }
+        function hideSettings() {
+            document.getElementById('settings-menu').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'flex';
+        }
+        function showShop() {
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('shop-menu').style.display = 'flex';
+            updateShop();
+        }
+        function hideShop() {
+            document.getElementById('shop-menu').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'flex';
+        }
+        function renderLeaderboard() {
+            const list = document.getElementById('leaderboard-list');
+            const scores = game.highScores || [];
+            if (scores.length === 0) {
+                list.innerHTML = '<div class="no-scores">No scores yet! Play a game first.</div>';
+                return;
+            }
+            list.innerHTML = scores.map((s, i) => `
+                <div class="leaderboard-row ${i < 3 ? 'top-' + (i + 1) : ''}">
+                    <span class="rank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1)}</span>
+                    <span class="biome-icon">${s.biome === 'forest' ? '🌲' : s.biome === 'desert' ? '🏜️' : '💀'}</span>
+                    <span class="score">${s.score}</span>
+                    <span class="depth">Depth ${s.depth}</span>
+                </div>
+            `).join('');
+        }
+        function clearData() {
+            if (confirm('Are you sure? This will delete ALL your progress!')) {
+                localStorage.clear();
+                location.reload();
+            }
+        }
+        function updateShop() {
+            const upgrades = JSON.parse(localStorage.getItem('upgrades') || '{}');
+            document.getElementById('shop-coins').textContent = game.totalCoins || 0;
+            document.getElementById('attack-level').textContent = upgrades.attack || 0;
+            document.getElementById('defense-level').textContent = upgrades.defense || 0;
+            document.getElementById('dash-status').textContent = upgrades.dash ? '✅ Owned' : 'Not Owned';
+            document.getElementById('ranged-status').textContent = upgrades.ranged ? '✅ Owned' : 'Not Owned';
+        }
+        function buyUpgrade(type) {
+            const upgrades = JSON.parse(localStorage.getItem('upgrades') || '{}');
+            let cost = (type === 'dash') ? 100 : (type === 'ranged') ? 150 : 50;
+
+            if (game.totalCoins < cost) {
+                alert('Not enough coins!');
+                return;
+            }
+            if ((type === 'dash' || type === 'ranged') && upgrades[type]) {
+                alert('Already owned!');
+                return;
+            }
+
+            game.totalCoins -= cost;
+            localStorage.setItem('totalCoins', game.totalCoins.toString());
+
+            if (type === 'attack' || type === 'defense') {
+                upgrades[type] = (upgrades[type] || 0) + 1;
+            } else {
+                upgrades[type] = true;
+            }
+            localStorage.setItem('upgrades', JSON.stringify(upgrades));
+            updateShop();
+            document.getElementById('total-coins').textContent = game.totalCoins;
+        }
+
+        // Initialize
+        document.getElementById('total-coins').textContent = game.totalCoins || 0;
+    </script>
+</body>
+
+</html>

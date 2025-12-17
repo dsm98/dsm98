@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Descend into the Dark Depths in Dungeon Delver - A roguelike adventure game">
+    <meta name="theme-color" content="#1a1520">
+    <title>Dungeon Delver - Dark Depths</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="dungeon.css">
+</head>
+
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <div class="stat-group">
+                <div class="stat-row">
+                    <span class="stat-label">❤️ HP</span>
+                    <div class="bar-container">
+                        <div id="hp-fill" class="bar-fill hp"></div>
+                    </div>
+                    <span id="val-hp" class="stat-value">50/50</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">⚡ XP</span>
+                    <div class="bar-container">
+                        <div id="xp-fill" class="bar-fill xp"></div>
+                    </div>
+                    <span id="val-xp" class="stat-value">0/50</span>
+                </div>
+                <div class="stat-row"><span class="stat-label">⭐ SCORE</span><span id="val-score"
+                        class="stat-value">0</span></div>
+            </div>
+            <div class="stat-group" style="text-align:right;">
+                <div class="stat-row"><span class="stat-label">🏆 LVL</span><span id="val-lvl"
+                        class="stat-value">1</span></div>
+                <div class="stat-row"><span class="stat-label">📍 DEPTH</span><span id="val-depth"
+                        class="stat-value">1</span></div>
+                <div class="stat-row"><span class="stat-label">💰 COINS</span><span id="val-coins"
+                        class="stat-value">0</span></div>
+            </div>
+            <button id="menu-btn" class="ui-btn" onclick="game.togglePause()">☰</button>
+            <button id="power-btn" class="ui-btn power" onclick="game.usePower()" style="display:none;">💥</button>
+        </div>
+        <div id="log-container"></div>
+        <canvas id="minimap-container" width="120" height="90"></canvas>
+        <div id="game-over" class="menu-screen">
+            <h1>💀 You Have Fallen</h1>
+            <div class="subtitle">The dungeon consumes another hero...</div>
+            <button class="menu-btn btn-dungeon" onclick="resetGame()">⚔️ Try Again</button>
+            <button class="menu-btn secondary" onclick="showMainMenu()">🏠 Main Menu</button>
+        </div>
+        <div id="pause-menu" class="menu-screen">
+            <h1>⏸️ Paused</h1>
+            <div class="subtitle">Press ESC to resume</div>
+            <button class="menu-btn btn-dungeon" onclick="resumeGame()">▶️ Resume</button>
+            <button class="menu-btn secondary" onclick="showMainMenu()">🏠 Main Menu</button>
+        </div>
+        <div id="controls">
+            <div class="dpad">
+                <div class="btn btn-up" data-key="ArrowUp">▲</div>
+                <div class="btn btn-left" data-key="ArrowLeft">◀</div>
+                <div class="btn btn-down" data-key="ArrowDown">▼</div>
+                <div class="btn btn-right" data-key="ArrowRight">▶</div>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+    <script>window.onload = () => game.start('dungeon');</script>
+</body>
+
+</html>

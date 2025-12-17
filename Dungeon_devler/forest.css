@@ -1,0 +1,49 @@
+/* Forest Theme - Lush Green Nature */
+body {
+    background: linear-gradient(135deg, #0a1a0a 0%, #1a2e1a 50%, #0f1f0f 100%);
+}
+
+#game-container {
+    background: #0a1a0a;
+}
+
+.bar-fill#hp-fill {
+    background: linear-gradient(90deg, #6daa2c, #8dc63f);
+}
+
+.menu-btn {
+    background: linear-gradient(135deg, #2d5e2d, #4a8a4a);
+    box-shadow: 0 6px 0 #1a3a1a, 0 8px 25px rgba(45, 94, 45, 0.4);
+}
+
+.menu-btn:hover {
+    background: linear-gradient(135deg, #3a7a3a, #5a9a5a);
+}
+
+#game-over h1 {
+    color: #6daa2c;
+    text-shadow: 0 0 40px rgba(109, 170, 44, 0.5);
+}
+
+/* Forest ambient style */
+#ui-layer {
+    background: linear-gradient(to bottom, rgba(10, 26, 10, 0.9), transparent);
+}
+
+.stat-label {
+    color: #8dc63f;
+}
+
+#minimap-container {
+    border-color: #2d5e2d;
+    box-shadow: 0 4px 20px rgba(45, 94, 45, 0.3);
+}
+
+.btn {
+    background: rgba(45, 94, 45, 0.2);
+    border-color: rgba(109, 170, 44, 0.4);
+}
+
+.btn:active {
+    background: rgba(109, 170, 44, 0.4);
+}

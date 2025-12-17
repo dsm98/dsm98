@@ -1,0 +1,62 @@
+/* Dungeon Theme - Dark Depths */
+body {
+    background: linear-gradient(135deg, #08080a 0%, #151520 50%, #0a0a0f 100%);
+}
+
+#game-container {
+    background: #08080a;
+}
+
+.bar-fill#hp-fill {
+    background: linear-gradient(90deg, #6a5a7a, #8a7a9a);
+}
+
+.menu-btn {
+    background: linear-gradient(135deg, #4a3d55, #6a5a7a);
+    box-shadow: 0 6px 0 #2a1f30, 0 8px 25px rgba(74, 61, 85, 0.4);
+}
+
+.menu-btn:hover {
+    background: linear-gradient(135deg, #5a4d65, #7a6a8a);
+}
+
+#game-over h1 {
+    color: #8a7a9a;
+    text-shadow: 0 0 40px rgba(138, 122, 154, 0.5);
+}
+
+/* Dungeon ambient style */
+#ui-layer {
+    background: linear-gradient(to bottom, rgba(8, 8, 10, 0.95), transparent);
+}
+
+.stat-label {
+    color: #8a7a9a;
+}
+
+#minimap-container {
+    border-color: #4a3d55;
+    box-shadow: 0 4px 20px rgba(74, 61, 85, 0.3);
+}
+
+.btn {
+    background: rgba(74, 61, 85, 0.2);
+    border-color: rgba(138, 122, 154, 0.4);
+}
+
+.btn:active {
+    background: rgba(138, 122, 154, 0.4);
+}
+
+/* Dungeon-specific torch flicker effect */
+@keyframes flicker {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.8;
+    }
+}

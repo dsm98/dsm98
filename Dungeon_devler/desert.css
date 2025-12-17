@@ -1,0 +1,49 @@
+/* Desert Theme - Scorching Sands */
+body {
+    background: linear-gradient(135deg, #1a0f08 0%, #2a1a10 50%, #1f1308 100%);
+}
+
+#game-container {
+    background: #1a0f08;
+}
+
+.bar-fill#hp-fill {
+    background: linear-gradient(90deg, #c9956c, #e0a878);
+}
+
+.menu-btn {
+    background: linear-gradient(135deg, #a05b22, #c9956c);
+    box-shadow: 0 6px 0 #7a4023, 0 8px 25px rgba(160, 91, 34, 0.4);
+}
+
+.menu-btn:hover {
+    background: linear-gradient(135deg, #b06b32, #d9a57c);
+}
+
+#game-over h1 {
+    color: #c9956c;
+    text-shadow: 0 0 40px rgba(201, 149, 108, 0.5);
+}
+
+/* Desert ambient style */
+#ui-layer {
+    background: linear-gradient(to bottom, rgba(26, 15, 8, 0.9), transparent);
+}
+
+.stat-label {
+    color: #e0a878;
+}
+
+#minimap-container {
+    border-color: #7a4023;
+    box-shadow: 0 4px 20px rgba(122, 64, 35, 0.3);
+}
+
+.btn {
+    background: rgba(160, 91, 34, 0.2);
+    border-color: rgba(201, 149, 108, 0.4);
+}
+
+.btn:active {
+    background: rgba(201, 149, 108, 0.4);
+}
