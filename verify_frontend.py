@@ -1,38 +1,26 @@
+
 from playwright.sync_api import sync_playwright
+import os
 
-def verify_frontend():
+def run():
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={'width': 375, 'height': 667}) # Mobile viewport
 
-        # Navigate to the index page
-        page.goto("http://localhost:8080/Dungeon_devler/index.html")
+        # Go to forest.html
+        cwd = os.getcwd()
+        path = os.path.join(cwd, 'Dungeon_devler', 'forest.html')
+        print(f"Navigating to {path}")
+        page.goto(f'file://{path}')
 
-        # Take a screenshot of the main menu
-        page.screenshot(path="verification_main_menu.png")
+        # Inject script to show buttons (force them to display for visual check)
+        # Note: In real game they show based on upgrades/class.
+        page.evaluate("document.getElementById('dash-btn').style.display = 'flex'")
+        page.evaluate("document.getElementById('ranged-btn').style.display = 'flex'")
 
-        # Click on Daily Challenge
-        page.click("button.btn-daily")
-
-        # Wait for game to load
-        page.wait_for_selector("canvas#gameCanvas")
-
-        # Take a screenshot of the game
-        page.screenshot(path="verification_game.png")
-
-        # Navigate back to index
-        page.goto("http://localhost:8080/Dungeon_devler/index.html")
-
-        # Select Warrior
-        page.click("#class-warrior")
-
-        # Select Rogue
-        page.click("#class-rogue")
-
-        # Take a screenshot of the class selection
-        page.screenshot(path="verification_class_selection.png")
-
+        page.screenshot(path='verification_forest.png')
+        print("Screenshot saved to verification_forest.png")
         browser.close()
 
-if __name__ == "__main__":
-    verify_frontend()
+if __name__ == '__main__':
+    run()
