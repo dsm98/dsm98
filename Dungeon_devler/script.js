@@ -13,6 +13,19 @@ const COLORS = {
     d_floor: ['#1a1520', '#1f1825'], d_wall: '#2a1f30', d_top: '#4a3d55'
 };
 
+class SeededRandom {
+    constructor(seed) {
+        this.seed = seed % 2147483647;
+        if (this.seed <= 0) this.seed += 2147483646;
+    }
+    next() {
+        return this.seed = this.seed * 16807 % 2147483647;
+    }
+    float() {
+        return (this.next() - 1) / 2147483646;
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -58,6 +71,9 @@ class Game {
         this.camera = { x: 0, y: 0 };
         this.shake = 0;
 
+        // Seeded RNG
+        this.rng = new SeededRandom(Date.now());
+
         // Sound System
         this.sounds = {};
         this.initSounds();
@@ -66,6 +82,15 @@ class Game {
         this.bindInput();
         window.addEventListener('resize', () => this.resize());
         this.resize();
+
+        // Parse URL params for seed
+        const urlParams = new URLSearchParams(window.location.search);
+        this.urlSeed = urlParams.get('seed');
+        this.isDaily = urlParams.get('daily') === 'true';
+    }
+
+    random() {
+        return this.rng.float();
     }
 
     initSounds() {
@@ -99,7 +124,7 @@ class Game {
     }
 
     saveHighScore() {
-        this.highScores.push({ score: this.score, depth: this.depth, biome: this.biome, date: Date.now() });
+        this.highScores.push({ score: this.score, depth: this.depth, biome: this.biome, date: Date.now(), daily: this.isDaily });
         this.highScores.sort((a, b) => b.score - a.score);
         this.highScores = this.highScores.slice(0, 10);
         localStorage.setItem('highScores', JSON.stringify(this.highScores));
@@ -156,12 +181,43 @@ class Game {
         this.coins = 0;
         this.combo = 0;
 
+        // Initialize RNG with seed if provided, or random
+        let seed = this.urlSeed ? parseInt(this.urlSeed) : Date.now();
+        // If it's not daily, we might want to reseed each level differently, but keeping it simple for now:
+        // Actually, roguelikes usually use seed + depth for each level to ensure determinism if you replay the same seed.
+        this.baseSeed = seed;
+        this.rng = new SeededRandom(this.baseSeed);
+
         // Apply shop upgrades
         const upgrades = JSON.parse(localStorage.getItem('upgrades') || '{}');
         let baseDmg = 5 + (upgrades.attack || 0) * 2;
         let baseHp = 50 + (upgrades.defense || 0) * 10;
 
-        this.player = { x: 1, y: 1, vx: 1, vy: 1, hp: baseHp, maxHp: baseHp, xp: 0, nextXp: 50, lvl: 1, dmg: baseDmg, moving: false, timer: 0 };
+        // Class Modifiers
+        const playerClass = localStorage.getItem('selectedClass') || 'warrior';
+        let classDmg = 0;
+        let classHp = 0;
+        let classSpeed = 6; // timer value, lower is faster? No, timer is wait time.
+
+        if (playerClass === 'warrior') {
+            classHp = 20;
+            classDmg = 2;
+        } else if (playerClass === 'rogue') {
+            classSpeed = 5; // Faster
+            // Starts with dash maybe?
+        } else if (playerClass === 'mage') {
+            // Mage starts with 25 XP (halfway to level 2)
+        }
+
+        this.player = {
+            x: 1, y: 1, vx: 1, vy: 1,
+            hp: baseHp + classHp, maxHp: baseHp + classHp,
+            xp: playerClass === 'mage' ? 25 : 0, nextXp: 50, lvl: 1,
+            dmg: baseDmg + classDmg,
+            class: playerClass,
+            moving: false, timer: 0
+        };
+
         this.active = true;
         this.paused = false;
 
@@ -180,11 +236,19 @@ class Game {
         if (uiLayer) uiLayer.style.display = 'flex';
         if (controls) controls.style.display = (window.innerWidth < 800) ? 'flex' : 'none';
 
-        // Show action buttons if owned
+        // Show action buttons if owned OR class default
         const dashBtn = document.getElementById('dash-btn');
         const rangedBtn = document.getElementById('ranged-btn');
-        if (dashBtn) dashBtn.style.display = upgrades.dash ? 'flex' : 'none';
-        if (rangedBtn) rangedBtn.style.display = upgrades.ranged ? 'flex' : 'none';
+
+        let hasDash = upgrades.dash || playerClass === 'rogue';
+        let hasRanged = upgrades.ranged;
+
+        if (dashBtn) dashBtn.style.display = hasDash ? 'flex' : 'none';
+        if (rangedBtn) rangedBtn.style.display = hasRanged ? 'flex' : 'none';
+
+        // Grant dash if rogue
+        if (playerClass === 'rogue') upgrades.dash = true; // Temporary override for session?
+        // Better to handle in dashAttack check
     }
 
     loop() {
@@ -250,7 +314,9 @@ class Game {
         if (this.map[ny][nx] !== 0) return;
 
         this.player.x = nx; this.player.y = ny;
-        this.player.moving = true; this.player.timer = 6;
+        this.player.moving = true;
+        // Speed based on class
+        this.player.timer = this.player.class === 'rogue' ? 5 : 6;
 
         let itemIdx = this.items.findIndex(i => i.x === nx && i.y === ny);
         if (itemIdx !== -1) { this.collect(this.items[itemIdx]); this.items.splice(itemIdx, 1); }
@@ -311,7 +377,7 @@ class Game {
                 if (dist === 1) { this.attack(e, this.player); }
                 else {
                     let best = { x: e.x, y: e.y, val: this.scent[e.y]?.[e.x] ?? 9999 };
-                    [[0, 1], [0, -1], [1, 0], [-1, 0]].sort(() => Math.random() - 0.5).forEach(([ddx, ddy]) => {
+                    [[0, 1], [0, -1], [1, 0], [-1, 0]].sort(() => this.random() - 0.5).forEach(([ddx, ddy]) => {
                         let nx = e.x + ddx, ny = e.y + ddy;
                         if (nx >= 0 && nx < this.mapW && ny >= 0 && ny < this.mapH && this.map[ny][nx] === 0) {
                             if (!this.entities.find(en => en.x === nx && en.y === ny) && (nx !== this.player.x || ny !== this.player.y)) {
@@ -327,7 +393,7 @@ class Game {
     }
 
     attack(attacker, defender) {
-        let dmg = Math.max(1, attacker.dmg + Math.floor(Math.random() * 3) - 1);
+        let dmg = Math.max(1, attacker.dmg + Math.floor(this.random() * 3) - 1);
         defender.hp -= dmg;
         this.addText(defender.vx * TILE_SIZE + 24, defender.vy * TILE_SIZE, `-${dmg}`, defender === this.player ? '#ff6b6b' : '#fff');
         this.shake = 6;
@@ -354,7 +420,7 @@ class Game {
                 this.score += Math.floor(scoreGain);
 
                 // Drop coins
-                let coinDrop = 1 + Math.floor(Math.random() * 2);
+                let coinDrop = 1 + Math.floor(this.random() * 2);
                 this.coins += coinDrop;
                 this.totalCoins += coinDrop;
 
@@ -427,7 +493,9 @@ class Game {
     dashAttack() {
         if (!this.active || this.paused || this.player.moving) return;
         const upgrades = JSON.parse(localStorage.getItem('upgrades') || '{}');
-        if (!upgrades.dash) return;
+
+        // Allow dash if purchased OR if player class is Rogue
+        if (!upgrades.dash && this.player.class !== 'rogue') return;
 
         // Find direction based on last movement or facing
         let dx = 0, dy = 0;
@@ -558,7 +626,7 @@ class Game {
             this.addText(px, py, `+15 💎`, '#ff55ff');
             this.addParticles(px, py + 24, '#ff55ff', 8);
         } else if (item.type === 'mushroom') {
-            if (Math.random() < 0.7) {
+            if (this.random() < 0.7) {
                 let heal = 10;
                 this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);
                 this.addText(px, py, `+${heal} HP`, '#6daa2c');
@@ -581,6 +649,9 @@ class Game {
 
     // --- GENERATION ---
     generateLevel() {
+        // Reseed for each level to be deterministic based on depth + initial seed
+        this.rng = new SeededRandom(this.baseSeed + this.depth * 1337);
+
         let size = Math.min(50, 18 + this.depth * 4);
         this.mapW = size; this.mapH = size;
 
@@ -653,7 +724,7 @@ class Game {
         let itemCount = 5 + Math.floor(this.depth * 1.5);
         for (let i = 0; i < itemCount; i++) {
             let t = this.getEmptyTile();
-            let type = itemPool[Math.floor(Math.random() * itemPool.length)];
+            let type = itemPool[Math.floor(this.random() * itemPool.length)];
             this.items.push({ x: t.x, y: t.y, type });
         }
         // Always spawn exit chest
@@ -673,7 +744,7 @@ class Game {
             let t = this.getEmptyTile();
             // Don't place trap near player start
             if (Math.abs(t.x - this.player.x) + Math.abs(t.y - this.player.y) < 3) continue;
-            let type = trapPool[Math.floor(Math.random() * trapPool.length)];
+            let type = trapPool[Math.floor(this.random() * trapPool.length)];
             this.traps.push({ x: t.x, y: t.y, type, triggered: false });
         }
 
@@ -690,7 +761,7 @@ class Game {
 
         while (floorCount < floorGoal) {
             if (this.map[cy][cx] === 1) { this.map[cy][cx] = 0; floorCount++; }
-            let d = dirs[Math.floor(Math.random() * 4)];
+            let d = dirs[Math.floor(this.random() * 4)];
             let nx = cx + d[0], ny = cy + d[1];
             if (nx > 0 && nx < this.mapW - 1 && ny > 0 && ny < this.mapH - 1) { cx = nx; cy = ny; }
         }
@@ -698,10 +769,10 @@ class Game {
         // Add rooms for dungeon
         if (this.biome === 'dungeon') {
             for (let i = 0; i < 3 + this.depth; i++) {
-                let rx = 2 + Math.floor(Math.random() * (this.mapW - 6));
-                let ry = 2 + Math.floor(Math.random() * (this.mapH - 6));
-                let rw = 3 + Math.floor(Math.random() * 3);
-                let rh = 3 + Math.floor(Math.random() * 3);
+                let rx = 2 + Math.floor(this.random() * (this.mapW - 6));
+                let ry = 2 + Math.floor(this.random() * (this.mapH - 6));
+                let rw = 3 + Math.floor(this.random() * 3);
+                let rh = 3 + Math.floor(this.random() * 3);
                 for (let y = ry; y < ry + rh && y < this.mapH - 1; y++) {
                     for (let x = rx; x < rx + rw && x < this.mapW - 1; x++) {
                         this.map[y][x] = 0;
@@ -713,10 +784,10 @@ class Game {
         // Add WATER features (lakes, ponds, rivers) - type 2
         if (this.biome === 'forest') {
             // Create 2-4 lakes
-            for (let l = 0; l < 2 + Math.floor(Math.random() * 3); l++) {
-                let lx = 3 + Math.floor(Math.random() * (this.mapW - 6));
-                let ly = 3 + Math.floor(Math.random() * (this.mapH - 6));
-                let lr = 2 + Math.floor(Math.random() * 3);
+            for (let l = 0; l < 2 + Math.floor(this.random() * 3); l++) {
+                let lx = 3 + Math.floor(this.random() * (this.mapW - 6));
+                let ly = 3 + Math.floor(this.random() * (this.mapH - 6));
+                let lr = 2 + Math.floor(this.random() * 3);
                 for (let dy = -lr; dy <= lr; dy++) {
                     for (let dx = -lr; dx <= lr; dx++) {
                         if (dx * dx + dy * dy <= lr * lr) {
@@ -729,11 +800,11 @@ class Game {
                 }
             }
             // Add a river/stream
-            let rx = 1, ry = Math.floor(Math.random() * this.mapH);
+            let rx = 1, ry = Math.floor(this.random() * this.mapH);
             while (rx < this.mapW - 1) {
                 if (this.map[ry][rx] !== 1) this.map[ry][rx] = 2;
                 rx++;
-                ry += Math.floor(Math.random() * 3) - 1;
+                ry += Math.floor(this.random() * 3) - 1;
                 ry = Math.max(1, Math.min(this.mapH - 2, ry));
             }
         }
@@ -742,9 +813,9 @@ class Game {
         // Forest: small ponds (not rivers that could block)
         if (this.biome === 'forest') {
             for (let l = 0; l < 2; l++) {
-                let lx = 3 + Math.floor(Math.random() * (this.mapW - 6));
-                let ly = 3 + Math.floor(Math.random() * (this.mapH - 6));
-                let lr = 1 + Math.floor(Math.random() * 2); // Smaller radius
+                let lx = 3 + Math.floor(this.random() * (this.mapW - 6));
+                let ly = 3 + Math.floor(this.random() * (this.mapH - 6));
+                let lr = 1 + Math.floor(this.random() * 2); // Smaller radius
                 for (let dy = -lr; dy <= lr; dy++) {
                     for (let dx = -lr; dx <= lr; dx++) {
                         if (dx * dx + dy * dy <= lr * lr) {
@@ -774,9 +845,6 @@ class Game {
             }
         }
 
-        // Dungeon: decorative water (not blocking paths)
-        // Skip canal - it blocks too much
-
         // Validate connectivity - if broken, remove water
         if (!this.validateConnectivity()) {
             // Remove all water if map is not connected
@@ -790,8 +858,8 @@ class Game {
         // Mountains as visual only (on walls, doesn't affect pathing)
         let mountainCount = this.biome === 'forest' ? 4 : (this.biome === 'desert' ? 6 : 3);
         for (let m = 0; m < mountainCount; m++) {
-            let mx = 2 + Math.floor(Math.random() * (this.mapW - 4));
-            let my = 2 + Math.floor(Math.random() * (this.mapH - 4));
+            let mx = 2 + Math.floor(this.random() * (this.mapW - 4));
+            let my = 2 + Math.floor(this.random() * (this.mapH - 4));
             if (this.map[my][mx] === 1) this.map[my][mx] = 3;
         }
     }
@@ -847,9 +915,9 @@ class Game {
                 if (this.map[y][x] === 0) {
                     // More decorations for a lush feel
                     let chance = this.biome === 'forest' ? 0.4 : (this.biome === 'desert' ? 0.15 : 0.12);
-                    if (Math.random() < chance) {
+                    if (this.random() < chance) {
                         // 6 decoration types per biome
-                        this.decorations[y][x] = 1 + Math.floor(Math.random() * 6);
+                        this.decorations[y][x] = 1 + Math.floor(this.random() * 6);
                     }
                 }
             }
@@ -858,7 +926,7 @@ class Game {
 
     getMobStats() {
         let hpBase = 8 + this.depth * 4, dmgBase = 2 + Math.floor(this.depth * 0.8);
-        let roll = Math.random();
+        let roll = this.random();
 
         if (this.biome === 'forest') {
             // Forest enemies: Slime, Spider, Treant
@@ -883,8 +951,8 @@ class Game {
     getEmptyTile() {
         let attempts = 0;
         while (attempts < 500) {
-            let x = 1 + Math.floor(Math.random() * (this.mapW - 2));
-            let y = 1 + Math.floor(Math.random() * (this.mapH - 2));
+            let x = 1 + Math.floor(this.random() * (this.mapW - 2));
+            let y = 1 + Math.floor(this.random() * (this.mapH - 2));
             if (this.map[y][x] === 0 && !this.entities.find(e => e.x === x && e.y === y) && !this.items.find(i => i.x === x && i.y === y)) {
                 if (!(x === this.player.x && y === this.player.y)) return { x, y };
             }
@@ -1115,35 +1183,45 @@ class Game {
         // Items
         this.items.forEach(i => {
             let x = i.x * TILE_SIZE, y = i.y * TILE_SIZE + Math.sin(this.tick * 0.08 + i.x) * 4;
+            // Glow effect
+            this.ctx.shadowColor = '#fff';
+            this.ctx.shadowBlur = 10;
+
             if (i.type === 'chest') {
                 this.ctx.fillStyle = '#6b4423'; this.ctx.fillRect(x + 10, y + 20, 28, 20);
                 this.ctx.fillStyle = '#8b6433'; this.ctx.fillRect(x + 10, y + 16, 28, 8);
                 this.ctx.fillStyle = '#ffd700'; this.ctx.fillRect(x + 22, y + 22, 4, 8);
             } else if (i.type === 'potion') {
+                this.ctx.shadowColor = '#f00';
                 // Health Potion - Red
                 this.ctx.fillStyle = '#d04648'; this.ctx.beginPath(); this.ctx.arc(x + 24, y + 30, 8, 0, Math.PI * 2); this.ctx.fill();
                 this.ctx.fillStyle = '#ff8888'; this.ctx.beginPath(); this.ctx.arc(x + 22, y + 28, 3, 0, Math.PI * 2); this.ctx.fill();
                 this.ctx.fillStyle = '#8b3030'; this.ctx.fillRect(x + 21, y + 20, 6, 6);
             } else if (i.type === 'mana') {
+                this.ctx.shadowColor = '#00f';
                 // Mana Potion - Blue
                 this.ctx.fillStyle = '#597dce'; this.ctx.beginPath(); this.ctx.arc(x + 24, y + 30, 8, 0, Math.PI * 2); this.ctx.fill();
                 this.ctx.fillStyle = '#99bbff'; this.ctx.beginPath(); this.ctx.arc(x + 22, y + 28, 3, 0, Math.PI * 2); this.ctx.fill();
                 this.ctx.fillStyle = '#3a5590'; this.ctx.fillRect(x + 21, y + 20, 6, 6);
             } else if (i.type === 'strength') {
+                this.ctx.shadowColor = '#fa0';
                 // Strength Scroll - Orange
                 this.ctx.fillStyle = '#cc7722'; this.ctx.fillRect(x + 18, y + 22, 12, 16);
                 this.ctx.fillStyle = '#ff9944'; this.ctx.fillRect(x + 20, y + 24, 8, 12);
                 this.ctx.fillStyle = '#ffcc00'; this.ctx.fillText('⚔', x + 24, y + 34);
             } else if (i.type === 'shield') {
+                this.ctx.shadowColor = '#0f0';
                 // Shield Scroll - Green
                 this.ctx.fillStyle = '#447733'; this.ctx.fillRect(x + 18, y + 22, 12, 16);
                 this.ctx.fillStyle = '#66aa55'; this.ctx.fillRect(x + 20, y + 24, 8, 12);
                 this.ctx.fillStyle = '#aaffaa'; this.ctx.fillText('🛡', x + 24, y + 34);
             } else if (i.type === 'coin') {
+                this.ctx.shadowColor = '#ff0';
                 // Gold Coin
                 this.ctx.fillStyle = '#ffd700'; this.ctx.beginPath(); this.ctx.arc(x + 24, y + 28, 6, 0, Math.PI * 2); this.ctx.fill();
                 this.ctx.fillStyle = '#ffee88'; this.ctx.beginPath(); this.ctx.arc(x + 23, y + 27, 2, 0, Math.PI * 2); this.ctx.fill();
             } else if (i.type === 'gem') {
+                this.ctx.shadowColor = '#f0f';
                 // Purple Gem
                 this.ctx.fillStyle = '#aa33ff';
                 this.ctx.beginPath();
@@ -1151,6 +1229,7 @@ class Game {
                 this.ctx.closePath(); this.ctx.fill();
                 this.ctx.fillStyle = '#dd88ff'; this.ctx.beginPath(); this.ctx.arc(x + 22, y + 28, 3, 0, Math.PI * 2); this.ctx.fill();
             } else if (i.type === 'mushroom') {
+                this.ctx.shadowColor = '#000';
                 // Forest Mushroom
                 this.ctx.fillStyle = '#8b4513'; this.ctx.fillRect(x + 22, y + 32, 4, 10);
                 this.ctx.fillStyle = '#d04648'; this.ctx.beginPath(); this.ctx.arc(x + 24, y + 30, 8, Math.PI, 0); this.ctx.fill();
@@ -1158,6 +1237,7 @@ class Game {
                 this.ctx.beginPath(); this.ctx.arc(x + 20, y + 26, 2, 0, Math.PI * 2); this.ctx.fill();
                 this.ctx.beginPath(); this.ctx.arc(x + 28, y + 28, 2, 0, Math.PI * 2); this.ctx.fill();
             }
+            this.ctx.shadowBlur = 0;
         });
 
         // Entities
@@ -1368,6 +1448,24 @@ class Game {
         let c = this.biome === 'forest' ? '#4a7a4a' : (this.biome === 'desert' ? '#c9956c55' : '#4a4a5a');
         this.particles.push({ x, y, vx: (Math.random() - 0.5) * 0.5, vy: this.biome === 'desert' ? -0.3 : 0.3, life: 80, color: c, size: 2, ambient: true });
     }
+
+    shareScore() {
+        const text = `I reached Depth ${this.depth} in Dungeon Delver (${this.biome})! Score: ${this.score} #DungeonDelver`;
+        if (navigator.share) {
+            navigator.share({
+                title: 'Dungeon Delver Score',
+                text: text,
+                url: window.location.href
+            }).catch(console.error);
+        } else {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Score copied to clipboard!');
+            }).catch(() => {
+                alert('Failed to copy score: ' + text);
+            });
+        }
+    }
+
     gameOver() {
         this.active = false;
         this.saveHighScore();
@@ -1384,6 +1482,16 @@ class Game {
             }
             scoreDiv.innerHTML = `<div style="margin:20px 0;font-size:24px;">Score: <span style="color:#ffd700">${this.score}</span></div>
                 <div style="font-size:16px;opacity:0.8;">Coins: ${this.coins} | Depth: ${this.depth} | Level: ${this.player.lvl}</div>`;
+
+            // Add Share Button if not exists
+            if (!goEl.querySelector('.btn-share')) {
+                const shareBtn = document.createElement('button');
+                shareBtn.className = 'menu-btn btn-share';
+                shareBtn.style.backgroundColor = '#1d4ed8';
+                shareBtn.innerHTML = '📤 Share Score';
+                shareBtn.onclick = () => this.shareScore();
+                goEl.insertBefore(shareBtn, goEl.querySelectorAll('.menu-btn')[1]); // Insert after Try Again
+            }
         }
     }
 }
@@ -1398,4 +1506,3 @@ function selectMission(type) {
 function resetGame() { if (game) game.start(game.biome); }
 function resumeGame() { if (game) game.togglePause(); }
 function showMainMenu() { window.location.href = 'index.html'; }
-

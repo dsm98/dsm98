@@ -8,6 +8,7 @@
     --red: #d04648;
     --green: #6daa2c;
     --blue: #597dce;
+    --purple: #9933ff;
 }
 
 * {
@@ -43,6 +44,19 @@ canvas#gameCanvas {
     display: block;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
+}
+
+/* CRT Effect */
+.crt-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    background-size: 100% 2px, 3px 100%;
+    pointer-events: none;
+    z-index: 999;
 }
 
 /* HUD */
@@ -147,13 +161,11 @@ canvas#gameCanvas {
 }
 
 @keyframes powerPulse {
-
     0%,
     100% {
         transform: scale(1);
         box-shadow: 0 4px 20px rgba(255, 215, 0, 0.5);
     }
-
     50% {
         transform: scale(1.1);
         box-shadow: 0 4px 30px rgba(255, 215, 0, 0.8);
@@ -259,6 +271,7 @@ canvas#gameCanvas {
     align-items: center;
     z-index: 200;
     padding: 20px;
+    overflow-y: auto;
 }
 
 h1 {
@@ -275,6 +288,7 @@ h1 {
     font-size: 16px;
     margin-bottom: 40px;
     font-style: italic;
+    text-align: center;
 }
 
 .menu-btn {
@@ -292,6 +306,8 @@ h1 {
     transition: transform 0.15s, box-shadow 0.15s;
     text-transform: uppercase;
     letter-spacing: 1px;
+    position: relative;
+    overflow: hidden;
 }
 
 .menu-btn:hover {
@@ -300,6 +316,59 @@ h1 {
 
 .menu-btn:active {
     transform: translateY(0);
+}
+
+/* Class Selection */
+.class-grid {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.class-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 15px;
+    width: 140px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.class-card:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-3px);
+}
+
+.class-card.selected {
+    border-color: var(--accent);
+    background: rgba(255, 215, 0, 0.1);
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+}
+
+.class-icon {
+    font-size: 32px;
+    margin-bottom: 5px;
+}
+
+.class-title {
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 5px;
+}
+
+.class-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.btn-daily {
+    background: linear-gradient(135deg, #7b2cbf, #9d4edd);
+    box-shadow: 0 6px 0 #5a189a, 0 8px 25px rgba(123, 44, 191, 0.4);
+    width: 100%;
 }
 
 .btn-forest {
@@ -401,12 +470,10 @@ h1 {
 }
 
 @keyframes float {
-
     0%,
     100% {
         transform: translateY(0);
     }
-
     50% {
         transform: translateY(-10px);
     }

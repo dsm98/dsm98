@@ -20,12 +20,45 @@
         <div id="log-container"></div>
         <canvas id="minimap-container" width="120" height="90"></canvas>
 
+        <!-- CRT Overlay -->
+        <div class="crt-overlay"></div>
+
         <!-- Main Menu -->
         <div id="main-menu" class="menu-screen" style="display:flex">
             <div class="menu-header">
                 <div class="logo-icon">⚔️</div>
                 <h1>Dungeon Delver</h1>
                 <div class="subtitle">Ultimate Edition</div>
+            </div>
+
+            <!-- Daily Challenge -->
+            <div class="menu-section" style="margin-bottom: 20px;">
+                <button class="menu-btn btn-daily" onclick="startDailyChallenge()">
+                    📅 Daily Challenge
+                    <div style="font-size: 0.8em; font-weight: normal; margin-top: 5px;">Compete on today's seed!</div>
+                </button>
+            </div>
+
+            <!-- Class Selection -->
+            <div class="menu-section">
+                <h2>🦸 Choose Your Hero</h2>
+                <div class="class-grid">
+                    <div class="class-card selected" onclick="selectClass('warrior')" id="class-warrior">
+                        <div class="class-icon">🛡️</div>
+                        <div class="class-title">Warrior</div>
+                        <div class="class-desc">High HP & Damage</div>
+                    </div>
+                    <div class="class-card" onclick="selectClass('rogue')" id="class-rogue">
+                        <div class="class-icon">🗡️</div>
+                        <div class="class-title">Rogue</div>
+                        <div class="class-desc">Fast & Agile (Dash)</div>
+                    </div>
+                    <div class="class-card" onclick="selectClass('mage')" id="class-mage">
+                        <div class="class-icon">🔮</div>
+                        <div class="class-title">Mage</div>
+                        <div class="class-desc">High Mana & XP</div>
+                    </div>
+                </div>
             </div>
 
             <div class="menu-section">
@@ -164,6 +197,35 @@
 
     <script src="script.js"></script>
     <script>
+        // Class Selection Logic
+        let selectedClass = localStorage.getItem('selectedClass') || 'warrior';
+
+        function selectClass(cls) {
+            selectedClass = cls;
+            localStorage.setItem('selectedClass', cls);
+
+            // Update UI
+            document.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected'));
+            document.getElementById('class-' + cls).classList.add('selected');
+        }
+
+        // Initialize Class Selection UI
+        selectClass(selectedClass);
+
+        function startDailyChallenge() {
+            // Generate seed from date (YYYYMMDD)
+            const today = new Date();
+            const seedStr = today.getFullYear().toString() + (today.getMonth()+1).toString().padStart(2, '0') + today.getDate().toString().padStart(2, '0');
+            const seed = parseInt(seedStr);
+
+            // Determine biome based on day of week
+            const day = today.getDay();
+            const biomes = ['dungeon', 'forest', 'desert']; // 0=Sun (dungeon), 1=Mon (forest), etc.
+            const biome = biomes[day % 3];
+
+            window.location.href = `${biome}.html?seed=${seed}&daily=true`;
+        }
+
         // Menu functions
         function showLeaderboard() {
             document.getElementById('main-menu').style.display = 'none';
@@ -201,7 +263,7 @@
             list.innerHTML = scores.map((s, i) => `
                 <div class="leaderboard-row ${i < 3 ? 'top-' + (i + 1) : ''}">
                     <span class="rank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1)}</span>
-                    <span class="biome-icon">${s.biome === 'forest' ? '🌲' : s.biome === 'desert' ? '🏜️' : '💀'}</span>
+                    <span class="biome-icon">${s.daily ? '📅' : (s.biome === 'forest' ? '🌲' : s.biome === 'desert' ? '🏜️' : '💀')}</span>
                     <span class="score">${s.score}</span>
                     <span class="depth">Depth ${s.depth}</span>
                 </div>
