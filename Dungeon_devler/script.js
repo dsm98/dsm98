@@ -26,6 +26,291 @@ class SeededRandom {
     }
 }
 
+class Entity {
+    constructor(game, x, y) {
+        this.game = game;
+        this.x = x; this.y = y;
+        this.vx = x; this.vy = y;
+        this.hp = 10; this.maxHp = 10;
+        this.dead = false;
+        this.color = '#fff';
+    }
+
+    update() {
+        this.vx += (this.x - this.vx) * 0.25;
+        this.vy += (this.y - this.vy) * 0.25;
+    }
+
+    draw(ctx) {
+        // Default draw
+        let px = this.vx * TILE_SIZE, py = this.vy * TILE_SIZE;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(px + 12, py + 12, 24, 24);
+    }
+}
+
+class Player extends Entity {
+    constructor(game) {
+        super(game, 1, 1);
+        this.xp = 0; this.nextXp = 50; this.lvl = 1;
+        this.dmg = 5;
+        this.class = 'warrior';
+        this.moving = false;
+        this.timer = 0;
+        this.inputBuffer = null; // New: Input buffering
+    }
+
+    draw(ctx) {
+        let px = this.vx * TILE_SIZE, py = this.vy * TILE_SIZE;
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(px + 24, py + 42, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Body
+        ctx.fillStyle = '#fbf5ef'; ctx.fillRect(px + 18, py + 20, 12, 18);
+        // Armor based on class color (Warrior=Blue, Rogue=Green, Mage=Purple)
+        let armorColor = this.class === 'rogue' ? '#6daa2c' : (this.class === 'mage' ? '#9933ff' : '#597dce');
+        ctx.fillStyle = armorColor; ctx.fillRect(px + 16, py + 24, 16, 10);
+        // Helmet
+        ctx.fillStyle = this.class === 'warrior' ? '#4a6db8' : armorColor;
+        ctx.fillRect(px + 16, py + 14, 16, 10);
+
+        // Eyes
+        ctx.fillStyle = '#fff'; ctx.fillRect(px + 18, py + 17, 4, 4); ctx.fillRect(px + 26, py + 17, 4, 4);
+    }
+}
+
+class Enemy extends Entity {
+    constructor(game, x, y, type, stats) {
+        super(game, x, y);
+        this.type = type;
+        this.hp = stats.hp; this.maxHp = stats.hp;
+        this.dmg = stats.dmg;
+        this.xp = stats.xp;
+        this.color = stats.color;
+        this.speed = stats.speed; // Not used in turn based really, but maybe for initiative?
+
+        // AI State Machine
+        this.state = 'IDLE'; // IDLE, CHASE, PREPARE, ATTACK, COOLDOWN
+        this.alerted = false;
+        this.attackTarget = null; // Coordinates to attack
+    }
+
+    takeTurn() {
+        if (this.dead) return;
+
+        const dist = Math.abs(this.x - this.game.player.x) + Math.abs(this.y - this.game.player.y);
+
+        // State Machine
+        if (this.state === 'PREPARE') {
+            // Execute attack on the target tile
+            this.state = 'ATTACK';
+            this.performAttack();
+            this.state = 'COOLDOWN';
+            return;
+        }
+
+        if (this.state === 'COOLDOWN') {
+            this.state = 'CHASE'; // Recover
+            return;
+        }
+
+        if (this.state === 'ATTACK') {
+             this.state = 'IDLE';
+        }
+
+        // Logic: Spot player
+        if (dist < 8) {
+            if (!this.alerted) {
+                this.alerted = true;
+                this.game.addText(this.x * TILE_SIZE + 24, this.y * TILE_SIZE, "!", "#ff0000");
+            }
+            this.state = 'CHASE';
+        }
+
+        if (this.state === 'CHASE') {
+            // Ranged Logic (Skeleton, Sandworm)
+            if (['skeleton', 'sandworm'].includes(this.type)) {
+                let dx = this.game.player.x - this.x;
+                let dy = this.game.player.y - this.y;
+                if ((dx === 0 || dy === 0) && dist <= 5) {
+                    if (this.hasLineOfSight(this.game.player.x, this.game.player.y)) {
+                        this.state = 'PREPARE';
+                        this.attackTarget = { x: this.game.player.x, y: this.game.player.y, type: 'ranged' };
+                        this.game.playSound('step');
+                        return;
+                    }
+                }
+            }
+
+            // Check if can attack (range 1)
+            if (dist === 1) {
+                // Telegraph attack
+                this.state = 'PREPARE';
+                this.attackTarget = { x: this.game.player.x, y: this.game.player.y, type: 'melee' };
+                this.game.playSound('step');
+            } else {
+                this.moveTowardsPlayer();
+            }
+        } else {
+            // Random wander
+            if (this.game.random() < 0.2) {
+                let dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+                let d = dirs[Math.floor(this.game.random() * 4)];
+                this.tryMove(d[0], d[1]);
+            }
+        }
+    }
+
+    hasLineOfSight(tx, ty) {
+        let dx = Math.sign(tx - this.x);
+        let dy = Math.sign(ty - this.y);
+        let x = this.x + dx, y = this.y + dy;
+        while (x !== tx || y !== ty) {
+             let tile = this.game.map[y][x];
+             // Block on Wall (1) or Mountain (3), but allow Water (2)
+             if (tile === 1 || tile === 3) return false;
+             x += dx; y += dy;
+        }
+        return true;
+    }
+
+    moveTowardsPlayer() {
+        // Simple pathfinding (scent map based)
+        let best = { x: this.x, y: this.y, val: 9999 };
+        let moved = false;
+
+        // Check neighbors
+        [[0, 1], [0, -1], [1, 0], [-1, 0]].sort(() => this.game.random() - 0.5).forEach(([dx, dy]) => {
+            let nx = this.x + dx, ny = this.y + dy;
+            if (nx >= 0 && nx < this.game.mapW && ny >= 0 && ny < this.game.mapH && this.game.map[ny][nx] === 0) {
+                // Check entity collision
+                if (!this.game.entities.find(e => e.x === nx && e.y === ny) && (nx !== this.game.player.x || ny !== this.game.player.y)) {
+                    let val = this.game.scent[ny]?.[nx] ?? 9999;
+                    if (val < best.val) {
+                        best = { x: nx, y: ny, val };
+                    }
+                }
+            }
+        });
+
+        if (best.x !== this.x || best.y !== this.y) {
+            this.x = best.x; this.y = best.y;
+        }
+    }
+
+    tryMove(dx, dy) {
+        let nx = this.x + dx, ny = this.y + dy;
+        if (nx >= 0 && nx < this.game.mapW && ny >= 0 && ny < this.game.mapH && this.game.map[ny][nx] === 0) {
+            if (!this.game.entities.find(e => e.x === nx && e.y === ny) && (nx !== this.game.player.x || ny !== this.game.player.y)) {
+                this.x = nx; this.y = ny;
+            }
+        }
+    }
+
+    performAttack() {
+        // Attack the target tile
+        if (!this.attackTarget) return;
+
+        if (this.attackTarget.type === 'ranged') {
+            // Visual beam
+            this.game.addParticles(this.attackTarget.x * TILE_SIZE + 24, this.attackTarget.y * TILE_SIZE + 24, '#ff0000', 5);
+        }
+
+        // If player is still there, HIT
+        if (this.game.player.x === this.attackTarget.x && this.game.player.y === this.attackTarget.y) {
+            this.game.attack(this, this.game.player);
+        } else {
+            // Missed!
+            let tx = this.attackTarget.x * TILE_SIZE + 24;
+            let ty = this.attackTarget.y * TILE_SIZE + 24;
+            this.game.addText(tx, ty, "MISS", "#aaa");
+        }
+    }
+
+    draw(ctx) {
+        let px = this.vx * TILE_SIZE, py = this.vy * TILE_SIZE;
+
+        // State Indicator
+        if (this.state === 'PREPARE') {
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(px + 12, py - 5);
+            ctx.lineTo(px + 36, py - 5);
+            ctx.lineTo(px + 24, py + 5);
+            ctx.closePath();
+            ctx.fillStyle = '#ff0000';
+            ctx.fill();
+
+            // Ranged Warning Line
+            if (this.attackTarget && this.attackTarget.type === 'ranged') {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+                ctx.setLineDash([5, 5]);
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(px + 24, py + 24);
+                ctx.lineTo(this.attackTarget.x * TILE_SIZE + 24, this.attackTarget.y * TILE_SIZE + 24);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        // BOSS rendering
+        if (this.type === 'boss') {
+            // ... (Copy existing Boss render logic)
+            let pulse = Math.sin(this.game.tick * 0.1) * 0.1 + 1;
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.beginPath(); ctx.ellipse(px + 24, py + 44, 20 * pulse, 8, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = this.color;
+            ctx.beginPath(); ctx.ellipse(px + 24, py + 28, 18 * pulse, 20 * pulse, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ff0000';
+            ctx.beginPath(); ctx.arc(px + 18, py + 22, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(px + 30, py + 22, 5, 0, Math.PI * 2); ctx.fill();
+            // HP Bar
+            ctx.fillStyle = '#333'; ctx.fillRect(px, py - 10, 48, 8);
+            ctx.fillStyle = '#ff0000'; ctx.fillRect(px, py - 10, 48 * (this.hp / this.maxHp), 8);
+            ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 1; ctx.strokeRect(px, py - 10, 48, 8);
+            return;
+        }
+
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(px + 24, py + 42, 14, 5, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Body color (Flash red if preparing)
+        ctx.fillStyle = this.state === 'PREPARE' ? '#ff4444' : this.color;
+
+        if (this.type === 'slime') {
+            let bounce = Math.sin(this.game.tick * 0.15) * 2;
+            ctx.beginPath(); ctx.ellipse(px + 24, py + 30 + bounce, 14, 12 - bounce / 2, 0, 0, Math.PI * 2); ctx.fill();
+        } else if (this.type === 'scorpion') {
+            ctx.fillRect(px + 12, py + 32, 24, 8);
+            ctx.fillRect(px + 8, py + 28, 6, 6); ctx.fillRect(px + 34, py + 28, 6, 6);
+            ctx.fillStyle = '#ff6b6b'; ctx.fillRect(px + 38, py + 18, 4, 12);
+        } else if (this.type === 'spider') {
+            ctx.beginPath(); ctx.ellipse(px + 24, py + 32, 10, 8, 0, 0, Math.PI * 2); ctx.fill();
+            for (let i = 0; i < 4; i++) {
+                ctx.fillRect(px + 8 + i * 2, py + 26 + i * 3, 2, 8);
+                ctx.fillRect(px + 36 - i * 2, py + 26 + i * 3, 2, 8);
+            }
+        } else if (this.type === 'ghost') {
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath(); ctx.ellipse(px + 24, py + 28, 12, 14, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.fillRect(px + 18, py + 22, 4, 4); ctx.fillRect(px + 26, py + 22, 4, 4);
+            ctx.globalAlpha = 1;
+        } else {
+            ctx.fillRect(px + 18, py + 18, 12, 20);
+            ctx.fillStyle = '#fff'; ctx.fillRect(px + 20, py + 20, 3, 3); ctx.fillRect(px + 25, py + 20, 3, 3);
+        }
+
+        // HP Bar
+        ctx.fillStyle = '#333'; ctx.fillRect(px + 10, py + 8, 28, 4);
+        ctx.fillStyle = '#d04648'; ctx.fillRect(px + 10, py + 8, 28 * (this.hp / this.maxHp), 4);
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -67,7 +352,7 @@ class Game {
         this.items = [];
         this.traps = [];
 
-        this.player = { x: 0, y: 0, vx: 0, vy: 0, hp: 50, maxHp: 50, xp: 0, nextXp: 50, lvl: 1, dmg: 5, moving: false, timer: 0 };
+        this.player = new Player(this);
         this.camera = { x: 0, y: 0 };
         this.shake = 0;
 
@@ -136,6 +421,11 @@ class Game {
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'w', 'a', 's', 'd', 'r'].includes(e.key)) e.preventDefault();
             this.keys[e.key] = true;
 
+            // Input buffering (store last key pressed)
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].includes(e.key)) {
+                this.player.inputBuffer = e.key;
+            }
+
             // Escape to toggle pause
             if (e.key === 'Escape' && this.active) {
                 this.togglePause();
@@ -151,11 +441,21 @@ class Game {
                 this.rangedAttack();
             }
         });
-        window.addEventListener('keyup', e => this.keys[e.key] = false);
+        window.addEventListener('keyup', e => {
+            this.keys[e.key] = false;
+            if (this.player.inputBuffer === e.key) this.player.inputBuffer = null;
+        });
 
         document.querySelectorAll('.btn').forEach(b => {
-            ['touchstart', 'mousedown'].forEach(evt => b.addEventListener(evt, e => { e.preventDefault(); this.keys[b.dataset.key] = true; }));
-            ['touchend', 'mouseup', 'mouseleave'].forEach(evt => b.addEventListener(evt, e => { e.preventDefault(); this.keys[b.dataset.key] = false; }));
+            ['touchstart', 'mousedown'].forEach(evt => b.addEventListener(evt, e => {
+                e.preventDefault();
+                this.keys[b.dataset.key] = true;
+                this.player.inputBuffer = b.dataset.key;
+            }));
+            ['touchend', 'mouseup', 'mouseleave'].forEach(evt => b.addEventListener(evt, e => {
+                e.preventDefault();
+                this.keys[b.dataset.key] = false;
+            }));
         });
     }
 
@@ -181,10 +481,7 @@ class Game {
         this.coins = 0;
         this.combo = 0;
 
-        // Initialize RNG with seed if provided, or random
         let seed = this.urlSeed ? parseInt(this.urlSeed) : Date.now();
-        // If it's not daily, we might want to reseed each level differently, but keeping it simple for now:
-        // Actually, roguelikes usually use seed + depth for each level to ensure determinism if you replay the same seed.
         this.baseSeed = seed;
         this.rng = new SeededRandom(this.baseSeed);
 
@@ -197,31 +494,24 @@ class Game {
         const playerClass = localStorage.getItem('selectedClass') || 'warrior';
         let classDmg = 0;
         let classHp = 0;
-        let classSpeed = 6; // timer value, lower is faster? No, timer is wait time.
 
         if (playerClass === 'warrior') {
             classHp = 20;
             classDmg = 2;
-        } else if (playerClass === 'rogue') {
-            classSpeed = 5; // Faster
-            // Starts with dash maybe?
-        } else if (playerClass === 'mage') {
-            // Mage starts with 25 XP (halfway to level 2)
         }
 
-        this.player = {
-            x: 1, y: 1, vx: 1, vy: 1,
-            hp: baseHp + classHp, maxHp: baseHp + classHp,
-            xp: playerClass === 'mage' ? 25 : 0, nextXp: 50, lvl: 1,
-            dmg: baseDmg + classDmg,
-            class: playerClass,
-            moving: false, timer: 0
-        };
+        // Initialize Player Instance
+        this.player = new Player(this);
+        this.player.maxHp = baseHp + classHp;
+        this.player.hp = this.player.maxHp;
+        this.player.dmg = baseDmg + classDmg;
+        this.player.class = playerClass;
+        this.player.xp = playerClass === 'mage' ? 25 : 0;
+        this.player.vx = 1; this.player.vy = 1; // Reset visuals
 
         this.active = true;
         this.paused = false;
 
-        // Resume audio context on user interaction
         if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
 
         this.generateLevel();
@@ -236,7 +526,6 @@ class Game {
         if (uiLayer) uiLayer.style.display = 'flex';
         if (controls) controls.style.display = (window.innerWidth < 800) ? 'flex' : 'none';
 
-        // Show action buttons if owned OR class default
         const dashBtn = document.getElementById('dash-btn');
         const rangedBtn = document.getElementById('ranged-btn');
 
@@ -246,9 +535,7 @@ class Game {
         if (dashBtn) dashBtn.style.display = hasDash ? 'flex' : 'none';
         if (rangedBtn) rangedBtn.style.display = hasRanged ? 'flex' : 'none';
 
-        // Grant dash if rogue
-        if (playerClass === 'rogue') upgrades.dash = true; // Temporary override for session?
-        // Better to handle in dashAttack check
+        if (playerClass === 'rogue') upgrades.dash = true;
     }
 
     loop() {
@@ -260,14 +547,17 @@ class Game {
     }
 
     update() {
-        if (this.paused) return; // Don't update when paused
+        if (this.paused) return;
 
+        // Player Movement Logic (Throttled for turn feel)
         if (!this.player.moving) {
             let dx = 0, dy = 0;
-            if (this.keys['ArrowUp'] || this.keys['w']) dy = -1;
-            else if (this.keys['ArrowDown'] || this.keys['s']) dy = 1;
-            else if (this.keys['ArrowLeft'] || this.keys['a']) dx = -1;
-            else if (this.keys['ArrowRight'] || this.keys['d']) dx = 1;
+            let k = this.player.inputBuffer || ''; // Use buffer first
+
+            if (this.keys['ArrowUp'] || this.keys['w'] || k === 'ArrowUp') dy = -1;
+            else if (this.keys['ArrowDown'] || this.keys['s'] || k === 'ArrowDown') dy = 1;
+            else if (this.keys['ArrowLeft'] || this.keys['a'] || k === 'ArrowLeft') dx = -1;
+            else if (this.keys['ArrowRight'] || this.keys['d'] || k === 'ArrowRight') dx = 1;
 
             if (dx !== 0 || dy !== 0) this.movePlayer(dx, dy);
         } else {
@@ -275,16 +565,19 @@ class Game {
             if (this.player.timer <= 0) this.player.moving = false;
         }
 
+        // Clear buffer if consumed? Or let keyup handle it?
+        // Better to clear buffer after use to prevent auto-move
+        if (this.player.moving) this.player.inputBuffer = null;
+
         // Camera
         let tx = this.player.vx * TILE_SIZE - this.width / 2 + TILE_SIZE / 2;
         let ty = this.player.vy * TILE_SIZE - this.height / 2 + TILE_SIZE / 2;
         this.camera.x += (tx - this.camera.x) * 0.1;
         this.camera.y += (ty - this.camera.y) * 0.1;
 
-        // Lerps
-        this.player.vx += (this.player.x - this.player.vx) * 0.25;
-        this.player.vy += (this.player.y - this.player.vy) * 0.25;
-        this.entities.forEach(e => { e.vx += (e.x - e.vx) * 0.15; e.vy += (e.y - e.vy) * 0.15; });
+        // Update Entities (Visuals)
+        this.player.update();
+        this.entities.forEach(e => e.update());
 
         // Particles
         this.particles = this.particles.filter(p => p.life > 0);
@@ -305,23 +598,24 @@ class Game {
         let target = this.entities.find(e => e.x === nx && e.y === ny);
         if (target) {
             this.attack(this.player, target);
+            // Visual bump
             this.player.vx += dx * 0.3; this.player.vy += dy * 0.3;
+            // Delay next move slightly
+            this.player.moving = true;
+            this.player.timer = 8;
             this.processTurn();
             return;
         }
 
-        // Block walls (1), water (2), and mountains (3)
         if (this.map[ny][nx] !== 0) return;
 
         this.player.x = nx; this.player.y = ny;
         this.player.moving = true;
-        // Speed based on class
-        this.player.timer = this.player.class === 'rogue' ? 5 : 6;
+        this.player.timer = this.player.class === 'rogue' ? 5 : 6; // Move speed
 
         let itemIdx = this.items.findIndex(i => i.x === nx && i.y === ny);
         if (itemIdx !== -1) { this.collect(this.items[itemIdx]); this.items.splice(itemIdx, 1); }
 
-        // Check for traps
         let trap = this.traps.find(t => t.x === nx && t.y === ny);
         if (trap) {
             this.triggerTrap(trap);
@@ -334,68 +628,51 @@ class Game {
     triggerTrap(trap) {
         let px = this.player.vx * TILE_SIZE + 24, py = this.player.vy * TILE_SIZE;
         trap.triggered = true;
+        let dmg = 0;
 
         if (trap.type === 'spike') {
-            let dmg = 5 + this.depth;
+            dmg = 5 + this.depth;
             this.player.hp -= dmg;
             this.addText(px, py, `Spikes! -${dmg}`, '#d04648');
             this.addParticles(px, py + 24, '#aaa', 10);
             this.shake = 4;
         } else if (trap.type === 'poison') {
-            let dmg = 3 + Math.floor(this.depth / 2);
+            dmg = 3 + Math.floor(this.depth / 2);
             this.player.hp -= dmg;
             this.addText(px, py, `Poison! -${dmg}`, '#9933ff');
             this.addParticles(px, py + 24, '#9933ff', 12);
         } else if (trap.type === 'fire') {
-            let dmg = 8 + this.depth;
+            dmg = 8 + this.depth;
             this.player.hp -= dmg;
             this.addText(px, py, `Fire! -${dmg}`, '#ff6600');
             this.addParticles(px, py + 24, '#ff6600', 15);
             this.shake = 6;
         } else if (trap.type === 'vine') {
-            // Vine trap - skip next turn
             this.player.timer = 12;
             this.addText(px, py, `Tangled!`, '#6daa2c');
             this.addParticles(px, py + 24, '#6daa2c', 8);
         } else if (trap.type === 'quicksand') {
-            let dmg = 4;
+            dmg = 4;
             this.player.hp -= dmg;
-            this.player.timer = 15; // Slow
+            this.player.timer = 15;
             this.addText(px, py, `Quicksand! -${dmg}`, '#c9956c');
             this.addParticles(px, py + 24, '#c9956c', 10);
         }
 
+        if (dmg > 0) this.player.takeDamage(0); // Just triggers death check if needed
         if (this.player.hp <= 0) this.gameOver();
         this.updateUI();
     }
 
     processTurn() {
         this.updateScentMap();
-        this.entities.forEach(e => {
-            let dist = Math.abs(e.x - this.player.x) + Math.abs(e.y - this.player.y);
-            if (dist < 8) {
-                if (dist === 1) { this.attack(e, this.player); }
-                else {
-                    let best = { x: e.x, y: e.y, val: this.scent[e.y]?.[e.x] ?? 9999 };
-                    [[0, 1], [0, -1], [1, 0], [-1, 0]].sort(() => this.random() - 0.5).forEach(([ddx, ddy]) => {
-                        let nx = e.x + ddx, ny = e.y + ddy;
-                        if (nx >= 0 && nx < this.mapW && ny >= 0 && ny < this.mapH && this.map[ny][nx] === 0) {
-                            if (!this.entities.find(en => en.x === nx && en.y === ny) && (nx !== this.player.x || ny !== this.player.y)) {
-                                let val = this.scent[ny]?.[nx] ?? 9999;
-                                if (val < best.val) best = { x: nx, y: ny, val };
-                            }
-                        }
-                    });
-                    if (best.val < (this.scent[e.y]?.[e.x] ?? 9999)) { e.x = best.x; e.y = best.y; }
-                }
-            }
-        });
+        // Update all enemies
+        this.entities.forEach(e => e.takeTurn());
     }
 
     attack(attacker, defender) {
         let dmg = Math.max(1, attacker.dmg + Math.floor(this.random() * 3) - 1);
-        defender.hp -= dmg;
-        this.addText(defender.vx * TILE_SIZE + 24, defender.vy * TILE_SIZE, `-${dmg}`, defender === this.player ? '#ff6b6b' : '#fff');
+        defender.takeDamage(dmg);
         this.shake = 6;
         this.addParticles(defender.vx * TILE_SIZE + 24, defender.vy * TILE_SIZE + 24, defender === this.player ? '#d04648' : '#6daa2c', 8);
 
@@ -406,20 +683,18 @@ class Game {
             this.playSound('hit');
         }
 
-        if (defender.hp <= 0) {
+        if (defender.dead) {
             if (defender === this.player) { this.gameOver(); }
             else {
                 this.playSound('kill');
                 this.entities = this.entities.filter(e => e !== defender);
                 this.player.xp += defender.xp;
 
-                // Score & Combo
                 this.combo++;
                 this.comboTimer = 60;
                 let scoreGain = defender.xp * (1 + this.combo * 0.2);
                 this.score += Math.floor(scoreGain);
 
-                // Drop coins
                 let coinDrop = 1 + Math.floor(this.random() * 2);
                 this.coins += coinDrop;
                 this.totalCoins += coinDrop;
@@ -441,7 +716,6 @@ class Game {
         this.score += 100 * this.player.lvl;
         this.playSound('levelup');
 
-        // Grant power on level up
         this.powerReady = true;
         const powerBtn = document.getElementById('power-btn');
         if (powerBtn) powerBtn.style.display = 'flex';
@@ -450,7 +724,6 @@ class Game {
         this.addParticles(this.player.vx * TILE_SIZE + 24, this.player.vy * TILE_SIZE + 24, '#ffd700', 25);
     }
 
-    // Special power attack - damages all nearby enemies
     usePower() {
         if (!this.powerReady || !this.active || this.paused) return;
 
@@ -464,24 +737,20 @@ class Game {
         let px = this.player.vx * TILE_SIZE + 24;
         let py = this.player.vy * TILE_SIZE + 24;
 
-        // Damage all enemies in range 3
         let killCount = 0;
         this.entities.forEach(e => {
             let dist = Math.abs(e.x - this.player.x) + Math.abs(e.y - this.player.y);
             if (dist <= 3) {
                 let dmg = this.player.dmg * 3;
-                e.hp -= dmg;
-                this.addText(e.vx * TILE_SIZE + 24, e.vy * TILE_SIZE, `-${dmg}`, '#ffd700');
+                e.takeDamage(dmg);
                 this.addParticles(e.vx * TILE_SIZE + 24, e.vy * TILE_SIZE + 24, '#ffd700', 10);
-                if (e.hp <= 0) killCount++;
+                if (e.dead) killCount++;
             }
         });
 
-        // Remove dead entities
-        this.entities = this.entities.filter(e => e.hp > 0);
+        this.entities = this.entities.filter(e => !e.dead);
         this.score += killCount * 50;
 
-        // Big explosion effect
         this.addParticles(px, py, '#ffd700', 40);
         this.addParticles(px, py, '#ff9900', 30);
         this.addText(px, py - 30, `💥 POWER BLAST! ${killCount} kills`, '#ffd700');
@@ -489,40 +758,34 @@ class Game {
         this.updateUI();
     }
 
-    // Dash Attack - rush forward and damage enemies
     dashAttack() {
         if (!this.active || this.paused || this.player.moving) return;
         const upgrades = JSON.parse(localStorage.getItem('upgrades') || '{}');
-
-        // Allow dash if purchased OR if player class is Rogue
         if (!upgrades.dash && this.player.class !== 'rogue') return;
 
-        // Find direction based on last movement or facing
         let dx = 0, dy = 0;
-        if (this.keys['ArrowUp'] || this.keys['w']) dy = -1;
-        else if (this.keys['ArrowDown'] || this.keys['s']) dy = 1;
-        else if (this.keys['ArrowLeft'] || this.keys['a']) dx = -1;
-        else if (this.keys['ArrowRight'] || this.keys['d']) dx = 1;
-        else dx = 1; // Default right
+        let k = this.player.inputBuffer || '';
+        if (this.keys['ArrowUp'] || this.keys['w'] || k === 'ArrowUp') dy = -1;
+        else if (this.keys['ArrowDown'] || this.keys['s'] || k === 'ArrowDown') dy = 1;
+        else if (this.keys['ArrowLeft'] || this.keys['a'] || k === 'ArrowLeft') dx = -1;
+        else if (this.keys['ArrowRight'] || this.keys['d'] || k === 'ArrowRight') dx = 1;
+        else dx = 1;
 
         this.playSound('hit');
         this.shake = 8;
 
-        // Dash 3 tiles
         for (let i = 1; i <= 3; i++) {
             let nx = this.player.x + dx * i;
             let ny = this.player.y + dy * i;
 
             if (nx < 0 || nx >= this.mapW || ny < 0 || ny >= this.mapH || this.map[ny][nx] !== 0) break;
 
-            // Check for enemy at this position
             let enemy = this.entities.find(e => e.x === nx && e.y === ny);
             if (enemy) {
                 let dmg = this.player.dmg * 2;
-                enemy.hp -= dmg;
-                this.addText(enemy.vx * TILE_SIZE + 24, enemy.vy * TILE_SIZE, `-${dmg}`, '#00ffff');
+                enemy.takeDamage(dmg);
                 this.addParticles(enemy.vx * TILE_SIZE + 24, enemy.vy * TILE_SIZE + 24, '#00ffff', 15);
-                if (enemy.hp <= 0) {
+                if (enemy.dead) {
                     this.entities = this.entities.filter(e => e !== enemy);
                     this.score += 30;
                 }
@@ -540,39 +803,35 @@ class Game {
         this.processTurn();
     }
 
-    // Ranged Attack - shoot projectile
     rangedAttack() {
         if (!this.active || this.paused) return;
         const upgrades = JSON.parse(localStorage.getItem('upgrades') || '{}');
         if (!upgrades.ranged) return;
 
-        // Find direction
         let dx = 0, dy = 0;
-        if (this.keys['ArrowUp'] || this.keys['w']) dy = -1;
-        else if (this.keys['ArrowDown'] || this.keys['s']) dy = 1;
-        else if (this.keys['ArrowLeft'] || this.keys['a']) dx = -1;
-        else if (this.keys['ArrowRight'] || this.keys['d']) dx = 1;
+        let k = this.player.inputBuffer || '';
+        if (this.keys['ArrowUp'] || this.keys['w'] || k === 'ArrowUp') dy = -1;
+        else if (this.keys['ArrowDown'] || this.keys['s'] || k === 'ArrowDown') dy = 1;
+        else if (this.keys['ArrowLeft'] || this.keys['a'] || k === 'ArrowLeft') dx = -1;
+        else if (this.keys['ArrowRight'] || this.keys['d'] || k === 'ArrowRight') dx = 1;
         else dx = 1;
 
         this.playSound('hit');
 
-        // Find first enemy in line
         for (let i = 1; i <= 5; i++) {
             let nx = this.player.x + dx * i;
             let ny = this.player.y + dy * i;
 
             if (nx < 0 || nx >= this.mapW || ny < 0 || ny >= this.mapH || this.map[ny][nx] === 1) break;
 
-            // Arrow visual
             this.addParticles(nx * TILE_SIZE + 24, ny * TILE_SIZE + 24, '#ffaa00', 2);
 
             let enemy = this.entities.find(e => e.x === nx && e.y === ny);
             if (enemy) {
                 let dmg = Math.floor(this.player.dmg * 1.5);
-                enemy.hp -= dmg;
-                this.addText(enemy.vx * TILE_SIZE + 24, enemy.vy * TILE_SIZE, `-${dmg} 🏹`, '#ffaa00');
+                enemy.takeDamage(dmg);
                 this.addParticles(enemy.vx * TILE_SIZE + 24, enemy.vy * TILE_SIZE + 24, '#ffaa00', 12);
-                if (enemy.hp <= 0) {
+                if (enemy.dead) {
                     this.entities = this.entities.filter(e => e !== enemy);
                     this.score += 25;
                 }
@@ -583,10 +842,7 @@ class Game {
         this.processTurn();
     }
 
-    // Get upgrades and apply them
-    getUpgrades() {
-        return JSON.parse(localStorage.getItem('upgrades') || '{}');
-    }
+    getUpgrades() { return JSON.parse(localStorage.getItem('upgrades') || '{}'); }
 
     collect(item) {
         let px = this.player.vx * TILE_SIZE + 24, py = this.player.vy * TILE_SIZE;
@@ -647,9 +903,7 @@ class Game {
         this.updateUI();
     }
 
-    // --- GENERATION ---
     generateLevel() {
-        // Reseed for each level to be deterministic based on depth + initial seed
         this.rng = new SeededRandom(this.baseSeed + this.depth * 1337);
 
         let size = Math.min(50, 18 + this.depth * 4);
@@ -664,13 +918,9 @@ class Game {
         }
         this.entities = []; this.items = [];
 
-        // Generate using random walk (GUARANTEED CONNECTIVITY)
         this.generateWalkMap();
-
-        // Add biome decorations
         this.addDecorations();
 
-        // Spawn Player at a guaranteed open spot
         let start = this.getEmptyTile();
         this.player.x = this.player.vx = start.x;
         this.player.y = this.player.vy = start.y;
@@ -679,29 +929,25 @@ class Game {
         this.updateVisibility();
         this.updateScentMap();
 
-        // Boss every 5 levels
         this.isBossLevel = this.depth % 5 === 0;
         this.boss = null;
 
-        // Entities
         let count = this.isBossLevel ? Math.floor(this.depth * 0.5) : Math.min(15, 4 + Math.floor(this.depth * 1.2));
         for (let i = 0; i < count; i++) {
             let t = this.getEmptyTile();
             if (Math.abs(t.x - this.player.x) + Math.abs(t.y - this.player.y) < 4) continue;
-            this.entities.push({ x: t.x, y: t.y, vx: t.x, vy: t.y, ...this.getMobStats() });
+            let stats = this.getMobStats();
+            this.entities.push(new Enemy(this, t.x, t.y, stats.type, stats));
         }
 
-        // Spawn BOSS on boss levels
         if (this.isBossLevel) {
             let bossPos = this.getEmptyTile();
-            // Ensure boss spawns far from player
             for (let attempts = 0; attempts < 50; attempts++) {
                 if (Math.abs(bossPos.x - this.player.x) + Math.abs(bossPos.y - this.player.y) >= 8) break;
                 bossPos = this.getEmptyTile();
             }
 
-            this.boss = {
-                x: bossPos.x, y: bossPos.y, vx: bossPos.x, vy: bossPos.y,
+            let bossStats = {
                 type: 'boss',
                 hp: 80 + this.depth * 20,
                 maxHp: 80 + this.depth * 20,
@@ -710,11 +956,11 @@ class Game {
                 color: this.biome === 'forest' ? '#2d5e2d' : (this.biome === 'desert' ? '#8b4513' : '#4a1a4a'),
                 speed: 0.5
             };
-            this.entities.push(this.boss);
+            this.entities.push(new Enemy(this, bossPos.x, bossPos.y, 'boss', bossStats));
             this.addText(this.player.vx * TILE_SIZE + 24, this.player.vy * TILE_SIZE - 40, "⚠️ BOSS LEVEL!", '#ff0000');
         }
 
-        // Items - more variety!
+        // Items and Traps (same as before)
         const itemPool = this.biome === 'forest'
             ? ['potion', 'potion', 'mushroom', 'mushroom', 'coin', 'mana', 'gem']
             : this.biome === 'desert'
@@ -727,11 +973,9 @@ class Game {
             let type = itemPool[Math.floor(this.random() * itemPool.length)];
             this.items.push({ x: t.x, y: t.y, type });
         }
-        // Always spawn exit chest
         let exit = this.getEmptyTile();
         this.items.push({ x: exit.x, y: exit.y, type: 'chest' });
 
-        // TRAPS - biome specific
         this.traps = [];
         const trapPool = this.biome === 'forest'
             ? ['spike', 'poison', 'vine']
@@ -742,7 +986,6 @@ class Game {
         let trapCount = 3 + Math.floor(this.depth * 0.8);
         for (let i = 0; i < trapCount; i++) {
             let t = this.getEmptyTile();
-            // Don't place trap near player start
             if (Math.abs(t.x - this.player.x) + Math.abs(t.y - this.player.y) < 3) continue;
             let type = trapPool[Math.floor(this.random() * trapPool.length)];
             this.traps.push({ x: t.x, y: t.y, type, triggered: false });
@@ -753,7 +996,6 @@ class Game {
     }
 
     generateWalkMap() {
-        // Drunkard's Walk - guarantees connectivity
         let cx = Math.floor(this.mapW / 2), cy = Math.floor(this.mapH / 2);
         let floorGoal = Math.floor(this.mapW * this.mapH * 0.45);
         let floorCount = 0;
@@ -766,7 +1008,6 @@ class Game {
             if (nx > 0 && nx < this.mapW - 1 && ny > 0 && ny < this.mapH - 1) { cx = nx; cy = ny; }
         }
 
-        // Add rooms for dungeon
         if (this.biome === 'dungeon') {
             for (let i = 0; i < 3 + this.depth; i++) {
                 let rx = 2 + Math.floor(this.random() * (this.mapW - 6));
@@ -781,9 +1022,7 @@ class Game {
             }
         }
 
-        // Add WATER features (lakes, ponds, rivers) - type 2
         if (this.biome === 'forest') {
-            // Create 2-4 lakes
             for (let l = 0; l < 2 + Math.floor(this.random() * 3); l++) {
                 let lx = 3 + Math.floor(this.random() * (this.mapW - 6));
                 let ly = 3 + Math.floor(this.random() * (this.mapH - 6));
@@ -793,13 +1032,12 @@ class Game {
                         if (dx * dx + dy * dy <= lr * lr) {
                             let nx = lx + dx, ny = ly + dy;
                             if (nx > 0 && nx < this.mapW - 1 && ny > 0 && ny < this.mapH - 1) {
-                                if (this.map[ny][nx] === 0) this.map[ny][nx] = 2; // Water
+                                if (this.map[ny][nx] === 0) this.map[ny][nx] = 2;
                             }
                         }
                     }
                 }
             }
-            // Add a river/stream
             let rx = 1, ry = Math.floor(this.random() * this.mapH);
             while (rx < this.mapW - 1) {
                 if (this.map[ry][rx] !== 1) this.map[ry][rx] = 2;
@@ -809,13 +1047,11 @@ class Game {
             }
         }
 
-        // WATER features - ONLY placed on floor tiles, with connectivity check
-        // Forest: small ponds (not rivers that could block)
         if (this.biome === 'forest') {
             for (let l = 0; l < 2; l++) {
                 let lx = 3 + Math.floor(this.random() * (this.mapW - 6));
                 let ly = 3 + Math.floor(this.random() * (this.mapH - 6));
-                let lr = 1 + Math.floor(this.random() * 2); // Smaller radius
+                let lr = 1 + Math.floor(this.random() * 2);
                 for (let dy = -lr; dy <= lr; dy++) {
                     for (let dx = -lr; dx <= lr; dx++) {
                         if (dx * dx + dy * dy <= lr * lr) {
@@ -829,7 +1065,6 @@ class Game {
             }
         }
 
-        // Desert: single small oasis
         if (this.biome === 'desert') {
             let ox = Math.floor(this.mapW / 2);
             let oy = Math.floor(this.mapH / 2);
@@ -845,9 +1080,7 @@ class Game {
             }
         }
 
-        // Validate connectivity - if broken, remove water
         if (!this.validateConnectivity()) {
-            // Remove all water if map is not connected
             for (let y = 0; y < this.mapH; y++) {
                 for (let x = 0; x < this.mapW; x++) {
                     if (this.map[y][x] === 2) this.map[y][x] = 0;
@@ -855,7 +1088,6 @@ class Game {
             }
         }
 
-        // Mountains as visual only (on walls, doesn't affect pathing)
         let mountainCount = this.biome === 'forest' ? 4 : (this.biome === 'desert' ? 6 : 3);
         for (let m = 0; m < mountainCount; m++) {
             let mx = 2 + Math.floor(this.random() * (this.mapW - 4));
@@ -864,9 +1096,7 @@ class Game {
         }
     }
 
-    // Check if all floor tiles are connected
     validateConnectivity() {
-        // Find first floor tile
         let startX = -1, startY = -1;
         outer: for (let y = 1; y < this.mapH - 1; y++) {
             for (let x = 1; x < this.mapW - 1; x++) {
@@ -875,7 +1105,6 @@ class Game {
         }
         if (startX === -1) return false;
 
-        // Flood fill
         let visited = [];
         for (let y = 0; y < this.mapH; y++) visited.push(new Array(this.mapW).fill(false));
 
@@ -897,7 +1126,6 @@ class Game {
             });
         }
 
-        // Count total floor tiles
         let totalFloor = 0;
         for (let y = 0; y < this.mapH; y++) {
             for (let x = 0; x < this.mapW; x++) {
@@ -905,7 +1133,6 @@ class Game {
             }
         }
 
-        // If we reached at least 80% of floor tiles, it's connected enough
         return count >= totalFloor * 0.8;
     }
 
@@ -913,10 +1140,8 @@ class Game {
         for (let y = 1; y < this.mapH - 1; y++) {
             for (let x = 1; x < this.mapW - 1; x++) {
                 if (this.map[y][x] === 0) {
-                    // More decorations for a lush feel
                     let chance = this.biome === 'forest' ? 0.4 : (this.biome === 'desert' ? 0.15 : 0.12);
                     if (this.random() < chance) {
-                        // 6 decoration types per biome
                         this.decorations[y][x] = 1 + Math.floor(this.random() * 6);
                     }
                 }
@@ -929,20 +1154,17 @@ class Game {
         let roll = this.random();
 
         if (this.biome === 'forest') {
-            // Forest enemies: Slime, Spider, Treant
             if (roll < 0.5) return { type: 'slime', hp: hpBase, maxHp: hpBase, dmg: dmgBase, xp: 8 + this.depth, color: '#6daa2c', speed: 1 };
             if (roll < 0.8) return { type: 'spider', hp: hpBase - 3, maxHp: hpBase - 3, dmg: dmgBase + 2, xp: 10 + this.depth, color: '#4a3040', speed: 2 };
             return { type: 'treant', hp: hpBase + 10, maxHp: hpBase + 10, dmg: dmgBase + 1, xp: 15 + this.depth, color: '#5c3a20', speed: 0.5 };
         }
 
         if (this.biome === 'desert') {
-            // Desert enemies: Scorpion, Mummy, Sandworm
             if (roll < 0.5) return { type: 'scorpion', hp: hpBase, maxHp: hpBase, dmg: dmgBase + 1, xp: 10 + this.depth, color: '#c9956c', speed: 1 };
             if (roll < 0.8) return { type: 'mummy', hp: hpBase + 5, maxHp: hpBase + 5, dmg: dmgBase, xp: 12 + this.depth, color: '#d4c4a0', speed: 0.7 };
             return { type: 'sandworm', hp: hpBase + 8, maxHp: hpBase + 8, dmg: dmgBase + 3, xp: 18 + this.depth, color: '#8b6b4a', speed: 0.5 };
         }
 
-        // Dungeon enemies: Skeleton, Ghost, Demon
         if (roll < 0.5) return { type: 'skeleton', hp: hpBase, maxHp: hpBase, dmg: dmgBase + 1, xp: 10 + this.depth, color: '#ccc', speed: 1 };
         if (roll < 0.8) return { type: 'ghost', hp: hpBase - 5, maxHp: hpBase - 5, dmg: dmgBase + 2, xp: 12 + this.depth, color: '#8888cc', speed: 1.5 };
         return { type: 'demon', hp: hpBase + 12, maxHp: hpBase + 12, dmg: dmgBase + 4, xp: 20 + this.depth, color: '#d04648', speed: 0.8 };
@@ -958,7 +1180,6 @@ class Game {
             }
             attempts++;
         }
-        // Fallback: find any empty tile
         for (let y = 1; y < this.mapH - 1; y++) {
             for (let x = 1; x < this.mapW - 1; x++) {
                 if (this.map[y][x] === 0) return { x, y };
@@ -977,7 +1198,6 @@ class Game {
         for (let y = 0; y < this.mapH; y++) {
             for (let x = 0; x < this.mapW; x++) {
                 let px = x * TILE_SIZE, py = y * TILE_SIZE;
-                // Floor
                 cx.fillStyle = cFloor[(x + y) % 2];
                 cx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
 
@@ -995,34 +1215,27 @@ class Game {
                         cx.fillStyle = '#1a1520'; cx.fillRect(px + 8, py + 22, 8, 6); cx.fillRect(px + 32, py + 22, 8, 6);
                     }
                 } else if (this.map[y][x] === 2) {
-                    // WATER tile - base layer (animation done in draw())
                     cx.fillStyle = this.biome === 'dungeon' ? '#1a3040' : '#2a5580';
                     cx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-                    // Water edge details
                     cx.fillStyle = this.biome === 'dungeon' ? '#0f2030' : '#1a4570';
                     cx.fillRect(px, py, TILE_SIZE, 4);
                     cx.fillRect(px, py + TILE_SIZE - 4, TILE_SIZE, 4);
                 } else if (this.map[y][x] === 3) {
-                    // MOUNTAIN tile
                     cx.fillStyle = cFloor[(x + y) % 2];
                     cx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-                    // Mountain shape
                     if (this.biome === 'forest') {
                         cx.fillStyle = '#4a5a5a';
                         cx.beginPath(); cx.moveTo(px, py + 48); cx.lineTo(px + 24, py + 5); cx.lineTo(px + 48, py + 48); cx.fill();
                         cx.fillStyle = '#6a7a7a';
                         cx.beginPath(); cx.moveTo(px + 10, py + 48); cx.lineTo(px + 24, py + 15); cx.lineTo(px + 38, py + 48); cx.fill();
-                        // Snow cap
                         cx.fillStyle = '#fff';
                         cx.beginPath(); cx.moveTo(px + 18, py + 20); cx.lineTo(px + 24, py + 5); cx.lineTo(px + 30, py + 20); cx.fill();
                     } else if (this.biome === 'desert') {
-                        // Sand dune / mesa
                         cx.fillStyle = '#a07040';
                         cx.beginPath(); cx.moveTo(px, py + 48); cx.lineTo(px + 12, py + 10); cx.lineTo(px + 36, py + 10); cx.lineTo(px + 48, py + 48); cx.fill();
                         cx.fillStyle = '#c09060';
                         cx.fillRect(px + 12, py + 10, 24, 10);
                     } else {
-                        // Dungeon pillar/stalagmite
                         cx.fillStyle = '#3a3040';
                         cx.fillRect(px + 14, py + 8, 20, 38);
                         cx.fillStyle = '#4a4050';
@@ -1032,7 +1245,6 @@ class Game {
                     let d = this.decorations[y][x];
                     if (d > 0) {
                         if (this.biome === 'forest') {
-                            // Forest: 1=grass, 2=flower red, 3=flower yellow, 4=bush, 5=mushroom, 6=rock
                             if (d === 1) {
                                 cx.fillStyle = '#4a8a4a';
                                 for (let i = 0; i < 3; i++) cx.fillRect(px + 14 + i * 8, py + 30, 3, 12);
@@ -1052,7 +1264,6 @@ class Game {
                                 cx.fillStyle = '#555'; cx.beginPath(); cx.arc(px + 24, py + 38, 6, 0, Math.PI * 2); cx.fill();
                             }
                         } else if (this.biome === 'desert') {
-                            // Desert: 1=cactus, 2=skull, 3=rock, 4=dead bush, 5=bones, 6=sand pile
                             if (d === 1) {
                                 cx.fillStyle = '#5a8a4a'; cx.fillRect(px + 22, py + 14, 4, 28);
                                 cx.fillRect(px + 14, py + 22, 8, 4); cx.fillRect(px + 26, py + 28, 8, 4);
@@ -1069,7 +1280,6 @@ class Game {
                                 cx.fillStyle = '#c9a06c'; cx.beginPath(); cx.arc(px + 24, py + 40, 10, Math.PI, 0); cx.fill();
                             }
                         } else {
-                            // Dungeon: 1=crack, 2=bones, 3=cobweb, 4=puddle, 5=rubble, 6=torch sconce
                             if (d === 1) {
                                 cx.strokeStyle = '#1a1520'; cx.lineWidth = 2;
                                 cx.beginPath(); cx.moveTo(px + 20, py + 30); cx.lineTo(px + 28, py + 38); cx.stroke();
@@ -1103,7 +1313,6 @@ class Game {
 
         this.ctx.drawImage(this.mapCache, 0, 0);
 
-        // ANIMATED WATER - draw waves on top of cached water tiles
         let wStartX = Math.floor(this.camera.x / TILE_SIZE) - 1;
         let wStartY = Math.floor(this.camera.y / TILE_SIZE) - 1;
         let wEndX = wStartX + Math.ceil(this.width / TILE_SIZE) + 2;
@@ -1113,7 +1322,6 @@ class Game {
             for (let x = wStartX; x < wEndX; x++) {
                 if (y >= 0 && y < this.mapH && x >= 0 && x < this.mapW && this.map[y][x] === 2) {
                     let px = x * TILE_SIZE, py = y * TILE_SIZE;
-                    // Animated wave highlights
                     let wave1 = Math.sin(this.tick * 0.1 + x * 0.5 + y * 0.3) * 0.3 + 0.5;
                     let wave2 = Math.sin(this.tick * 0.15 + x * 0.7 - y * 0.2) * 0.2 + 0.5;
 
@@ -1123,13 +1331,11 @@ class Game {
                     this.ctx.fillStyle = `rgba(150, 220, 255, ${wave2 * 0.4})`;
                     this.ctx.fillRect(px + 10, py + 25 + Math.sin(this.tick * 0.12 + x + 1) * 2, 28, 4);
 
-                    // Sparkles
                     if (Math.random() < 0.02) {
                         this.ctx.fillStyle = '#fff';
                         this.ctx.fillRect(px + Math.random() * 40 + 4, py + Math.random() * 40 + 4, 3, 3);
                     }
 
-                    // Waterfall effect if wall above
                     if (y > 0 && this.map[y - 1][x] === 1) {
                         this.ctx.fillStyle = 'rgba(150, 200, 255, 0.6)';
                         for (let i = 0; i < 3; i++) {
@@ -1141,9 +1347,8 @@ class Game {
             }
         }
 
-        // TRAPS
         this.traps.forEach(t => {
-            if (!this.visited[t.y]?.[t.x]) return; // Only show discovered traps
+            if (!this.visited[t.y]?.[t.x]) return;
             let x = t.x * TILE_SIZE, y = t.y * TILE_SIZE;
             let pulse = Math.sin(this.tick * 0.15) * 0.2 + 0.8;
 
@@ -1180,10 +1385,8 @@ class Game {
             }
         });
 
-        // Items
         this.items.forEach(i => {
             let x = i.x * TILE_SIZE, y = i.y * TILE_SIZE + Math.sin(this.tick * 0.08 + i.x) * 4;
-            // Glow effect
             this.ctx.shadowColor = '#fff';
             this.ctx.shadowBlur = 10;
 
@@ -1193,36 +1396,30 @@ class Game {
                 this.ctx.fillStyle = '#ffd700'; this.ctx.fillRect(x + 22, y + 22, 4, 8);
             } else if (i.type === 'potion') {
                 this.ctx.shadowColor = '#f00';
-                // Health Potion - Red
                 this.ctx.fillStyle = '#d04648'; this.ctx.beginPath(); this.ctx.arc(x + 24, y + 30, 8, 0, Math.PI * 2); this.ctx.fill();
                 this.ctx.fillStyle = '#ff8888'; this.ctx.beginPath(); this.ctx.arc(x + 22, y + 28, 3, 0, Math.PI * 2); this.ctx.fill();
                 this.ctx.fillStyle = '#8b3030'; this.ctx.fillRect(x + 21, y + 20, 6, 6);
             } else if (i.type === 'mana') {
                 this.ctx.shadowColor = '#00f';
-                // Mana Potion - Blue
                 this.ctx.fillStyle = '#597dce'; this.ctx.beginPath(); this.ctx.arc(x + 24, y + 30, 8, 0, Math.PI * 2); this.ctx.fill();
                 this.ctx.fillStyle = '#99bbff'; this.ctx.beginPath(); this.ctx.arc(x + 22, y + 28, 3, 0, Math.PI * 2); this.ctx.fill();
                 this.ctx.fillStyle = '#3a5590'; this.ctx.fillRect(x + 21, y + 20, 6, 6);
             } else if (i.type === 'strength') {
                 this.ctx.shadowColor = '#fa0';
-                // Strength Scroll - Orange
                 this.ctx.fillStyle = '#cc7722'; this.ctx.fillRect(x + 18, y + 22, 12, 16);
                 this.ctx.fillStyle = '#ff9944'; this.ctx.fillRect(x + 20, y + 24, 8, 12);
                 this.ctx.fillStyle = '#ffcc00'; this.ctx.fillText('⚔', x + 24, y + 34);
             } else if (i.type === 'shield') {
                 this.ctx.shadowColor = '#0f0';
-                // Shield Scroll - Green
                 this.ctx.fillStyle = '#447733'; this.ctx.fillRect(x + 18, y + 22, 12, 16);
                 this.ctx.fillStyle = '#66aa55'; this.ctx.fillRect(x + 20, y + 24, 8, 12);
                 this.ctx.fillStyle = '#aaffaa'; this.ctx.fillText('🛡', x + 24, y + 34);
             } else if (i.type === 'coin') {
                 this.ctx.shadowColor = '#ff0';
-                // Gold Coin
                 this.ctx.fillStyle = '#ffd700'; this.ctx.beginPath(); this.ctx.arc(x + 24, y + 28, 6, 0, Math.PI * 2); this.ctx.fill();
                 this.ctx.fillStyle = '#ffee88'; this.ctx.beginPath(); this.ctx.arc(x + 23, y + 27, 2, 0, Math.PI * 2); this.ctx.fill();
             } else if (i.type === 'gem') {
                 this.ctx.shadowColor = '#f0f';
-                // Purple Gem
                 this.ctx.fillStyle = '#aa33ff';
                 this.ctx.beginPath();
                 this.ctx.moveTo(x + 24, y + 20); this.ctx.lineTo(x + 32, y + 30); this.ctx.lineTo(x + 24, y + 38); this.ctx.lineTo(x + 16, y + 30);
@@ -1230,7 +1427,6 @@ class Game {
                 this.ctx.fillStyle = '#dd88ff'; this.ctx.beginPath(); this.ctx.arc(x + 22, y + 28, 3, 0, Math.PI * 2); this.ctx.fill();
             } else if (i.type === 'mushroom') {
                 this.ctx.shadowColor = '#000';
-                // Forest Mushroom
                 this.ctx.fillStyle = '#8b4513'; this.ctx.fillRect(x + 22, y + 32, 4, 10);
                 this.ctx.fillStyle = '#d04648'; this.ctx.beginPath(); this.ctx.arc(x + 24, y + 30, 8, Math.PI, 0); this.ctx.fill();
                 this.ctx.fillStyle = '#fff';
@@ -1240,81 +1436,9 @@ class Game {
             this.ctx.shadowBlur = 0;
         });
 
-        // Entities
-        this.entities.sort((a, b) => a.y - b.y).forEach(e => {
-            let x = e.vx * TILE_SIZE, y = e.vy * TILE_SIZE;
-
-            // BOSS rendering
-            if (e.type === 'boss') {
-                let pulse = Math.sin(this.tick * 0.1) * 0.1 + 1;
-                // Large shadow
-                this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                this.ctx.beginPath(); this.ctx.ellipse(x + 24, y + 44, 20 * pulse, 8, 0, 0, Math.PI * 2); this.ctx.fill();
-                // Large body
-                this.ctx.fillStyle = e.color;
-                this.ctx.beginPath(); this.ctx.ellipse(x + 24, y + 28, 18 * pulse, 20 * pulse, 0, 0, Math.PI * 2); this.ctx.fill();
-                // Eyes - glowing red
-                this.ctx.fillStyle = '#ff0000';
-                this.ctx.beginPath(); this.ctx.arc(x + 18, y + 22, 5, 0, Math.PI * 2); this.ctx.fill();
-                this.ctx.beginPath(); this.ctx.arc(x + 30, y + 22, 5, 0, Math.PI * 2); this.ctx.fill();
-                // Crown/horns
-                this.ctx.fillStyle = '#ffd700';
-                this.ctx.beginPath();
-                this.ctx.moveTo(x + 10, y + 10); this.ctx.lineTo(x + 16, y + 0); this.ctx.lineTo(x + 22, y + 10);
-                this.ctx.fill();
-                this.ctx.beginPath();
-                this.ctx.moveTo(x + 26, y + 10); this.ctx.lineTo(x + 32, y + 0); this.ctx.lineTo(x + 38, y + 10);
-                this.ctx.fill();
-                // Boss HP bar (larger)
-                this.ctx.fillStyle = '#333'; this.ctx.fillRect(x, y - 10, 48, 8);
-                this.ctx.fillStyle = '#ff0000'; this.ctx.fillRect(x, y - 10, 48 * (e.hp / e.maxHp), 8);
-                this.ctx.strokeStyle = '#ffd700'; this.ctx.lineWidth = 1; this.ctx.strokeRect(x, y - 10, 48, 8);
-                return;
-            }
-
-            // Shadow
-            this.ctx.fillStyle = 'rgba(0,0,0,0.3)';
-            this.ctx.beginPath(); this.ctx.ellipse(x + 24, y + 42, 14, 5, 0, 0, Math.PI * 2); this.ctx.fill();
-            // Body
-            this.ctx.fillStyle = e.color;
-            if (e.type === 'slime') {
-                let bounce = Math.sin(this.tick * 0.15) * 2;
-                this.ctx.beginPath(); this.ctx.ellipse(x + 24, y + 30 + bounce, 14, 12 - bounce / 2, 0, 0, Math.PI * 2); this.ctx.fill();
-            } else if (e.type === 'scorpion') {
-                this.ctx.fillRect(x + 12, y + 32, 24, 8);
-                this.ctx.fillRect(x + 8, y + 28, 6, 6); this.ctx.fillRect(x + 34, y + 28, 6, 6);
-                this.ctx.fillStyle = '#ff6b6b'; this.ctx.fillRect(x + 38, y + 18, 4, 12);
-            } else if (e.type === 'spider') {
-                this.ctx.beginPath(); this.ctx.ellipse(x + 24, y + 32, 10, 8, 0, 0, Math.PI * 2); this.ctx.fill();
-                for (let i = 0; i < 4; i++) {
-                    this.ctx.fillRect(x + 8 + i * 2, y + 26 + i * 3, 2, 8);
-                    this.ctx.fillRect(x + 36 - i * 2, y + 26 + i * 3, 2, 8);
-                }
-            } else if (e.type === 'ghost') {
-                this.ctx.globalAlpha = 0.7;
-                this.ctx.beginPath(); this.ctx.ellipse(x + 24, y + 28, 12, 14, 0, 0, Math.PI * 2); this.ctx.fill();
-                this.ctx.fillStyle = '#fff'; this.ctx.fillRect(x + 18, y + 22, 4, 4); this.ctx.fillRect(x + 26, y + 22, 4, 4);
-                this.ctx.globalAlpha = 1;
-            } else {
-                this.ctx.fillRect(x + 18, y + 18, 12, 20);
-                this.ctx.fillStyle = '#fff'; this.ctx.fillRect(x + 20, y + 20, 3, 3); this.ctx.fillRect(x + 25, y + 20, 3, 3);
-            }
-            // HP Bar
-            this.ctx.fillStyle = '#333'; this.ctx.fillRect(x + 10, y + 8, 28, 4);
-            this.ctx.fillStyle = '#d04648'; this.ctx.fillRect(x + 10, y + 8, 28 * (e.hp / e.maxHp), 4);
-        });
-
-        // Player
-        let px = this.player.vx * TILE_SIZE, py = this.player.vy * TILE_SIZE;
-        this.ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        this.ctx.beginPath(); this.ctx.ellipse(px + 24, py + 42, 12, 5, 0, 0, Math.PI * 2); this.ctx.fill();
-        // Body
-        this.ctx.fillStyle = '#fbf5ef'; this.ctx.fillRect(px + 18, py + 20, 12, 18);
-        // Armor
-        this.ctx.fillStyle = '#597dce'; this.ctx.fillRect(px + 16, py + 24, 16, 10);
-        // Helmet
-        this.ctx.fillStyle = '#4a6db8'; this.ctx.fillRect(px + 16, py + 14, 16, 10);
-        this.ctx.fillStyle = '#fff'; this.ctx.fillRect(px + 18, py + 17, 4, 4); this.ctx.fillRect(px + 26, py + 17, 4, 4);
+        // Use new entity drawing
+        this.entities.sort((a, b) => a.y - b.y).forEach(e => e.draw(this.ctx));
+        this.player.draw(this.ctx);
 
         // Particles
         this.particles.forEach(p => {
@@ -1351,6 +1475,7 @@ class Game {
         this.drawVignette();
     }
 
+    // ... Copy methods: drawVignette, drawMinimap, updateScentMap, updateVisibility, updateUI, addText, addParticles, spawnAmbientParticle, shareScore, gameOver ...
     drawVignette() {
         let grd = this.ctx.createRadialGradient(this.width / 2, this.height / 2, this.height * 0.3, this.width / 2, this.height / 2, this.height * 0.8);
         grd.addColorStop(0, 'rgba(0,0,0,0)');
@@ -1368,10 +1493,10 @@ class Game {
             for (let x = 0; x < this.mapW; x++) {
                 if (this.visited[y][x]) {
                     let tile = this.map[y][x];
-                    if (tile === 1) mm.fillStyle = '#444';        // Wall
-                    else if (tile === 2) mm.fillStyle = '#2a5580'; // Water
-                    else if (tile === 3) mm.fillStyle = '#5a5a5a'; // Mountain
-                    else mm.fillStyle = '#2a2a2a';                 // Floor
+                    if (tile === 1) mm.fillStyle = '#444';
+                    else if (tile === 2) mm.fillStyle = '#2a5580';
+                    else if (tile === 3) mm.fillStyle = '#5a5a5a';
+                    else mm.fillStyle = '#2a2a2a';
                     mm.fillRect(x * tw, y * th, Math.ceil(tw), Math.ceil(th));
                 }
             }
@@ -1429,7 +1554,6 @@ class Game {
         if (scoreEl) scoreEl.innerText = this.score;
         if (coinsEl) coinsEl.innerText = this.coins;
 
-        // XP bar
         const xpEl = document.getElementById('val-xp');
         const xpFill = document.getElementById('xp-fill');
         if (xpEl) xpEl.innerText = `${this.player.xp}/${this.player.nextXp}`;
@@ -1473,7 +1597,6 @@ class Game {
         const goEl = document.getElementById('game-over');
         if (goEl) {
             goEl.style.display = 'flex';
-            // Add score display
             let scoreDiv = goEl.querySelector('.final-score');
             if (!scoreDiv) {
                 scoreDiv = document.createElement('div');
@@ -1483,14 +1606,13 @@ class Game {
             scoreDiv.innerHTML = `<div style="margin:20px 0;font-size:24px;">Score: <span style="color:#ffd700">${this.score}</span></div>
                 <div style="font-size:16px;opacity:0.8;">Coins: ${this.coins} | Depth: ${this.depth} | Level: ${this.player.lvl}</div>`;
 
-            // Add Share Button if not exists
             if (!goEl.querySelector('.btn-share')) {
                 const shareBtn = document.createElement('button');
                 shareBtn.className = 'menu-btn btn-share';
                 shareBtn.style.backgroundColor = '#1d4ed8';
                 shareBtn.innerHTML = '📤 Share Score';
                 shareBtn.onclick = () => this.shareScore();
-                goEl.insertBefore(shareBtn, goEl.querySelectorAll('.menu-btn')[1]); // Insert after Try Again
+                goEl.insertBefore(shareBtn, goEl.querySelectorAll('.menu-btn')[1]);
             }
         }
     }
