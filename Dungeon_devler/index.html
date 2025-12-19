@@ -7,7 +7,7 @@
     <meta name="description"
         content="Dungeon Delver - An epic roguelike adventure game. Explore mysterious dungeons, lush forests, and scorching deserts!">
     <meta name="theme-color" content="#0a0a0c">
-    <title>Dungeon Delver - Ultimate Edition</title>
+    <title>Dungeon Delver: Legends</title>
     <link rel="stylesheet" href="style.css">
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔️</text></svg>">
@@ -16,7 +16,26 @@
 <body>
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
-        <div id="ui-layer"></div>
+        <div id="ui-layer">
+             <!-- Inventory & Skills (Dynamic content handled by script) -->
+             <div id="hud-bottom">
+                <div class="hud-group" id="weapon-display">
+                    <div class="slot weapon-slot" id="slot-weapon">⚔️</div>
+                    <span class="key-hint">WEAPON</span>
+                </div>
+                <div class="hud-group" id="skill-display">
+                    <div class="slot skill-slot" id="slot-skill" onclick="game.player.useSkill()">⚡</div>
+                    <span class="key-hint">SKILL (Q)</span>
+                    <div class="cooldown-overlay" id="skill-cooldown"></div>
+                </div>
+                <div class="hud-group" id="inventory-display">
+                    <div class="slot item-slot" id="slot-1" onclick="game.useItem(0)">1</div>
+                    <div class="slot item-slot" id="slot-2" onclick="game.useItem(1)">2</div>
+                    <div class="slot item-slot" id="slot-3" onclick="game.useItem(2)">3</div>
+                    <span class="key-hint">INVENTORY (1-3)</span>
+                </div>
+             </div>
+        </div>
         <div id="log-container"></div>
         <canvas id="minimap-container" width="120" height="90"></canvas>
 
@@ -27,8 +46,8 @@
         <div id="main-menu" class="menu-screen" style="display:flex">
             <div class="menu-header">
                 <div class="logo-icon">⚔️</div>
-                <h1>Dungeon Delver</h1>
-                <div class="subtitle">Ultimate Edition</div>
+                <h1>Dungeon Delver: Legends</h1>
+                <div class="subtitle">High-Performance Roguelike</div>
             </div>
 
             <!-- Daily Challenge -->
@@ -43,20 +62,20 @@
             <div class="menu-section">
                 <h2>🦸 Choose Your Hero</h2>
                 <div class="class-grid">
-                    <div class="class-card selected" onclick="selectClass('warrior')" id="class-warrior">
+                    <div class="class-card selected" onclick="selectClass('knight')" id="class-knight">
                         <div class="class-icon">🛡️</div>
-                        <div class="class-title">Warrior</div>
-                        <div class="class-desc">High HP & Damage</div>
+                        <div class="class-title">Knight</div>
+                        <div class="class-desc">Tanky • Power Strike</div>
                     </div>
                     <div class="class-card" onclick="selectClass('rogue')" id="class-rogue">
                         <div class="class-icon">🗡️</div>
                         <div class="class-title">Rogue</div>
-                        <div class="class-desc">Fast & Agile (Dash)</div>
+                        <div class="class-desc">Agile • Shadow Dash</div>
                     </div>
-                    <div class="class-card" onclick="selectClass('mage')" id="class-mage">
+                    <div class="class-card" onclick="selectClass('wizard')" id="class-wizard">
                         <div class="class-icon">🔮</div>
-                        <div class="class-title">Mage</div>
-                        <div class="class-desc">High Mana & XP</div>
+                        <div class="class-title">Wizard</div>
+                        <div class="class-desc">Glass Cannon • Thunder Nova</div>
                     </div>
                 </div>
             </div>
@@ -188,17 +207,15 @@
                 <div class="btn btn-down" data-key="ArrowDown">▼</div>
                 <div class="btn btn-right" data-key="ArrowRight">▶</div>
             </div>
-            <div class="action-buttons">
-                <div class="action-btn" id="dash-btn" onclick="game.dashAttack()" style="display:none;">💨</div>
-                <div class="action-btn" id="ranged-btn" onclick="game.rangedAttack()" style="display:none;">🏹</div>
-            </div>
         </div>
     </div>
 
     <script src="script.js"></script>
     <script>
         // Class Selection Logic
-        let selectedClass = localStorage.getItem('selectedClass') || 'warrior';
+        let selectedClass = localStorage.getItem('selectedClass') || 'knight';
+        if (selectedClass === 'warrior') selectedClass = 'knight';
+        if (selectedClass === 'mage') selectedClass = 'wizard';
 
         function selectClass(cls) {
             selectedClass = cls;
@@ -206,7 +223,8 @@
 
             // Update UI
             document.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected'));
-            document.getElementById('class-' + cls).classList.add('selected');
+            const el = document.getElementById('class-' + cls);
+            if (el) el.classList.add('selected');
         }
 
         // Initialize Class Selection UI
