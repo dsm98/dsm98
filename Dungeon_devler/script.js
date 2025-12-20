@@ -13,6 +13,49 @@ const COLORS = {
     d_floor: ['#1a1520', '#1f1825'], d_wall: '#2a1f30', d_top: '#4a3d55'  // Dungeon
 };
 
+const CLASSES = {
+    warrior: {
+        name: 'Warrior', hp: 60, dmg: 3, color: '#aaa',
+        skillName: 'Whirlwind', skillColor: '#ffd700',
+        weapon: { name: 'Iron Sword', rarity: 'common', dmg: 3 }
+    },
+    mage: {
+        name: 'Mage', hp: 30, dmg: 1, color: '#593399',
+        skillName: 'Meteor', skillColor: '#ff4400',
+        weapon: { name: 'Staff', rarity: 'common', dmg: 1 }
+    },
+    rogue: {
+        name: 'Rogue', hp: 40, dmg: 2, color: '#222',
+        skillName: 'Shadow Step', skillColor: '#00ffff',
+        weapon: { name: 'Dagger', rarity: 'common', dmg: 2 }
+    },
+    ranger: {
+        name: 'Ranger', hp: 35, dmg: 2, color: '#6daa2c',
+        skillName: 'Rain of Arrows', skillColor: '#00ff00',
+        weapon: { name: 'Bow', rarity: 'common', dmg: 2 }
+    },
+    paladin: {
+        name: 'Paladin', hp: 50, dmg: 2, color: '#fff',
+        skillName: 'Sanctuary', skillColor: '#ffffaa',
+        weapon: { name: 'Hammer', rarity: 'common', dmg: 2 }
+    },
+    necromancer: {
+        name: 'Necromancer', hp: 35, dmg: 2, color: '#444',
+        skillName: 'Raise Army', skillColor: '#9933ff',
+        weapon: { name: 'Scythe', rarity: 'common', dmg: 2 }
+    },
+    berserker: {
+        name: 'Berserker', hp: 70, dmg: 4, color: '#d04648',
+        skillName: 'Undying Rage', skillColor: '#ff0000',
+        weapon: { name: 'Axe', rarity: 'common', dmg: 4 }
+    },
+    elementalist: {
+        name: 'Elementalist', hp: 30, dmg: 2, color: '#597dce',
+        skillName: 'Chaos Storm', skillColor: '#00ffff',
+        weapon: { name: 'Wand', rarity: 'common', dmg: 2 }
+    }
+};
+
 class SeededRandom {
     constructor(seed) {
         this.seed = seed % 2147483647;
@@ -80,18 +123,60 @@ class Player extends Entity {
     constructor(game) {
         super(game, 1, 1);
         this.xp = 0; this.nextXp = 50; this.lvl = 1;
-        this.baseDmg = 5;
-        this.class = 'knight';
+        this.class = 'warrior';
         this.moving = false;
         this.timer = 0;
         this.inputBuffer = null;
         this.inventory = [null, null, null];
-        this.weapon = { name: 'Rusty Sword', rarity: 'common', dmg: 2, element: null };
         this.skillCooldown = 0;
         this.maxCooldown = 20;
+
+        // Mechanics
+        this.grit = 0;
+        this.heat = 0;
+        this.comboPoints = 0;
+        this.focus = 0;
+        this.devotion = 0;
+        this.invincible = 0;
+        this.undying = 0;
+        this.attunement = 'fire'; // fire -> ice -> storm
+        this.invisible = 0;
+        this.fireImmunity = 0;
     }
 
-    get dmg() { return this.baseDmg + (this.weapon ? this.weapon.dmg : 0); }
+    initClass(className) {
+        if (!CLASSES[className]) className = 'warrior';
+        this.class = className;
+        const conf = CLASSES[className];
+        this.maxHp = conf.hp;
+        this.hp = conf.hp;
+        this.baseDmg = conf.dmg;
+        this.weapon = { ...conf.weapon, charge: 0, maxCharge: 5 };
+    }
+
+    get dmg() {
+        let d = this.baseDmg + (this.weapon ? this.weapon.dmg : 0);
+
+        // Mechanics modifiers
+        if (this.class === 'warrior' && this.grit >= 5) { /* True damage handled in attack */ }
+        if (this.class === 'mage') {
+             // High heat doubles damage but burns
+             if (this.heat > 5) d *= 2;
+        }
+        if (this.class === 'ranger') {
+            d += this.focus;
+        }
+        if (this.class === 'berserker') {
+            // Lower HP = Higher Dmg
+            let missingPct = (this.maxHp - this.hp) / this.maxHp;
+            d += Math.floor(missingPct * 5);
+        }
+        if (this.class === 'elementalist' && this.attunement === 'fire') {
+            d += 2;
+        }
+
+        return d;
+    }
 
     update() {
         super.update();
@@ -102,6 +187,38 @@ class Player extends Entity {
         }
     }
 
+    takeDamage(amount, type) {
+        if (this.invincible > 0) {
+            this.game.addText(this.vx * TILE_SIZE + 24, this.vy * TILE_SIZE, "BLOCKED", '#fff');
+            return;
+        }
+
+        if (type === 'burn' && this.fireImmunity > 0) {
+            this.game.addText(this.vx * TILE_SIZE + 24, this.vy * TILE_SIZE, "IMMUNE", '#fa0');
+            return;
+        }
+
+        if (this.class === 'elementalist' && this.attunement === 'ice') {
+            amount = Math.max(0, amount - 2); // Ice armor
+        }
+
+        super.takeDamage(amount, type);
+
+        if (this.class === 'warrior') {
+            this.grit = Math.min(5, this.grit + 1);
+            this.game.addText(this.vx * TILE_SIZE + 24, this.vy * TILE_SIZE - 20, "Grit!", '#aaa');
+        }
+        if (this.class === 'paladin') {
+            this.devotion = Math.min(10, this.devotion + 1);
+        }
+
+        // Berserker Undying logic check
+        if (this.hp <= 0 && this.undying > 0) {
+            this.hp = 1;
+            this.dead = false;
+        }
+    }
+
     useSkill() {
         if (this.skillCooldown > 0) {
             this.game.addText(this.vx * TILE_SIZE + 24, this.vy * TILE_SIZE - 20, "Not Ready!", '#888');
@@ -109,53 +226,129 @@ class Player extends Entity {
         }
 
         let used = false;
-        if (this.class === 'knight') {
+        const conf = CLASSES[this.class];
+
+        this.game.addText(this.vx * TILE_SIZE + 24, this.vy * TILE_SIZE - 30, conf.skillName.toUpperCase() + "!", conf.skillColor);
+
+        if (this.class === 'warrior') { // Whirlwind
             used = true;
             this.game.shake = 20;
             this.game.playSound('kill');
-            this.game.addText(this.vx * TILE_SIZE + 24, this.vy * TILE_SIZE - 30, "POWER STRIKE!", '#ffd700');
             for (let dy = -1; dy <= 1; dy++) {
                 for (let dx = -1; dx <= 1; dx++) {
                     if (dx===0 && dy===0) continue;
                     let nx = this.x + dx, ny = this.y + dy;
                     let enemy = this.game.entities.find(e => e.x === nx && e.y === ny);
                     if (enemy) {
-                        enemy.takeDamage(this.dmg * 3, 'physical');
+                        enemy.takeDamage(this.dmg * 2, 'physical');
                         this.game.addParticles(nx * TILE_SIZE + 24, ny * TILE_SIZE + 24, '#ffd700', 15);
                     }
                 }
             }
-        } else if (this.class === 'rogue') {
+        }
+        else if (this.class === 'mage') { // Meteor
             used = true;
-            this.game.addText(this.vx * TILE_SIZE + 24, this.vy * TILE_SIZE - 30, "SHADOW DASH!", '#00ffff');
-            this.game.playSound('coin');
-
-            let best = null;
-            // Try to teleport forward (based on input buffer or random)
-            for(let i=0; i<10; i++) {
-                let rx = this.x + Math.floor(this.game.random() * 9) - 4;
-                let ry = this.y + Math.floor(this.game.random() * 9) - 4;
-                if (rx > 0 && rx < this.game.mapW && this.game.map[ry][rx] === 0) {
-                    best = {x:rx, y:ry};
-                    if (this.game.random() > 0.5) break;
+            this.game.addText(this.vx * TILE_SIZE + 24, this.vy * TILE_SIZE - 40, "CASTING...", '#ff4400');
+            // Delayed effect
+            setTimeout(() => {
+                this.game.shake = 30;
+                this.game.playSound('kill'); // Big boom
+                // Hit random area near player or enemies? GDD says 3x3 area. Let's target nearest enemy.
+                let target = this.game.entities.length > 0 ? this.game.entities[0] : {x:this.x, y:this.y};
+                for(let dy=-1; dy<=1; dy++) {
+                    for(let dx=-1; dx<=1; dx++) {
+                         let nx = target.x + dx, ny = target.y + dy;
+                         this.game.addParticles(nx * TILE_SIZE + 24, ny * TILE_SIZE + 24, '#ff4400', 20);
+                         let enemy = this.game.entities.find(e => e.x === nx && e.y === ny);
+                         if(enemy) enemy.takeDamage(20, 'magic');
+                    }
                 }
-            }
-            if (best) {
-                this.x = best.x; this.y = best.y;
-                this.vx = this.x; this.vy = this.y;
-                this.game.updateFOV();
-            }
-        } else if (this.class === 'wizard') {
+            }, 500); // Visual delay for effect, logic happens somewhat instantly in turn based, but here we do it simply
+        }
+        else if (this.class === 'rogue') { // Shadow Step
             used = true;
-            this.game.shake = 15;
-            this.game.playSound('levelup');
-            this.game.addText(this.vx * TILE_SIZE + 24, this.vy * TILE_SIZE - 30, "THUNDER NOVA!", '#9933ff');
+            this.game.playSound('coin');
+            // Find nearest enemy
+            let target = this.game.entities.sort((a,b) => {
+                let da = Math.abs(a.x - this.x) + Math.abs(a.y - this.y);
+                let db = Math.abs(b.x - this.x) + Math.abs(b.y - this.y);
+                return da - db;
+            })[0];
+
+            if (target) {
+                let dmg = this.dmg * 3;
+                // Combo points usage
+                if (this.comboPoints > 0) {
+                    dmg += this.comboPoints * 5;
+                    this.game.addText(this.x*TILE_SIZE, this.y*TILE_SIZE, `COMBO x${this.comboPoints}!`, '#ffff00');
+                    this.comboPoints = 0;
+                }
+
+                if (target.type !== 'boss') {
+                     target.takeDamage(999, 'crit');
+                     this.x = target.x; this.y = target.y;
+                     this.vx = this.x; this.vy = this.y;
+                } else {
+                    target.takeDamage(dmg, 'crit');
+                }
+            } else {
+                 let rx = this.x + Math.floor(this.game.random() * 9) - 4;
+                 let ry = this.y + Math.floor(this.game.random() * 9) - 4;
+                 if (rx > 0 && rx < this.game.mapW && this.game.map[ry][rx] === 0) {
+                     this.x = rx; this.y = ry;
+                 }
+            }
+            this.game.updateFOV();
+        }
+        else if (this.class === 'ranger') { // Rain of Arrows
+            used = true;
+            for(let i=0; i<5; i++) {
+                let rx = this.x + Math.floor(this.game.random() * 7) - 3;
+                let ry = this.y + Math.floor(this.game.random() * 7) - 3;
+                let enemy = this.game.entities.find(e => e.x === rx && e.y === ry);
+                if (enemy) enemy.takeDamage(this.dmg, 'ranged');
+                this.game.addParticles(rx * TILE_SIZE + 24, ry * TILE_SIZE + 24, '#00ff00', 10);
+            }
+        }
+        else if (this.class === 'paladin') { // Sanctuary
+            used = true;
+            this.invincible = 3;
+            this.game.addText(this.vx * TILE_SIZE + 24, this.vy * TILE_SIZE - 40, "INVINCIBLE!", '#ffffaa');
+        }
+        else if (this.class === 'necromancer') { // Raise Army
+            used = true;
+            // Spawn skeletons
+            for(let i=0; i<3; i++) {
+                 let t = this.game.getEmptyTileNear(this.x, this.y);
+                 if (t) {
+                     // We need a friendly entity class? For now let's just damage enemies around as "spirits"
+                     // Or spawn a temporary ally.
+                     // Simpler: massive damage to all enemies on screen (Soul Bomb)
+                     this.game.entities.forEach(e => {
+                         if (Math.abs(e.x - this.x) < 8 && Math.abs(e.y - this.y) < 8) {
+                             e.takeDamage(5, 'magic');
+                         }
+                     });
+                     this.game.addParticles(t.x * TILE_SIZE + 24, t.y * TILE_SIZE + 24, '#444', 10);
+                 }
+            }
+        }
+        else if (this.class === 'berserker') { // Undying Rage
+            used = true;
+            this.undying = 5;
+            this.hp = Math.max(1, Math.floor(this.maxHp * 0.1)); // Heal a bit?
+             this.game.addText(this.vx * TILE_SIZE + 24, this.vy * TILE_SIZE - 40, "UNDYING!", '#d04648');
+        }
+        else if (this.class === 'elementalist') { // Chaos Storm
+            used = true;
+            // Apply all effects
             this.game.entities.forEach(e => {
-                if (this.game.visible[e.y]?.[e.x]) {
-                    e.takeDamage(this.dmg * 2, 'magic');
-                    this.game.addParticles(e.vx * TILE_SIZE + 24, e.vy * TILE_SIZE + 24, '#9933ff', 20);
+                if (Math.abs(e.x - this.x) < 5 && Math.abs(e.y - this.y) < 5) {
+                    e.takeDamage(this.dmg * 2, 'magic'); // Fire
+                    // Ice/Storm visual
                 }
             });
+             this.game.addParticles(this.vx * TILE_SIZE + 24, this.vy * TILE_SIZE + 24, '#597dce', 30);
         }
 
         if (used) {
@@ -169,15 +362,30 @@ class Player extends Entity {
         ctx.fillStyle = 'rgba(0,0,0,0.4)';
         ctx.beginPath(); ctx.ellipse(px + 24, py + 42, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fbf5ef'; ctx.fillRect(px + 18, py + 20, 12, 18);
-        let armorColor = this.class === 'rogue' ? '#333' : (this.class === 'wizard' ? '#4a1a4a' : '#888');
-        ctx.fillStyle = armorColor; ctx.fillRect(px + 16, py + 24, 16, 10);
-        ctx.fillStyle = this.class === 'knight' ? '#aaa' : (this.class === 'rogue' ? '#222' : '#593399');
+
+        let conf = CLASSES[this.class] || CLASSES['warrior'];
+        ctx.fillStyle = conf.color;
+
+        // Armor
+        ctx.fillRect(px + 16, py + 24, 16, 10);
+        ctx.fillStyle = this.color; // Head? No, body
+
+        // Helmet/Head
+        ctx.fillStyle = conf.color;
         ctx.fillRect(px + 16, py + 14, 16, 10);
+
         ctx.fillStyle = '#fff'; ctx.fillRect(px + 18, py + 17, 4, 4); ctx.fillRect(px + 26, py + 17, 4, 4);
 
         if (this.weapon) {
             ctx.fillStyle = this.weapon.rarity === 'legendary' ? '#ffd700' : (this.weapon.rarity === 'rare' ? '#9933ff' : '#888');
             ctx.fillRect(px + 30, py + 24, 4, 12);
+
+            // Charge glow
+            if (this.weapon.charge >= this.weapon.maxCharge) {
+                ctx.strokeStyle = '#00ffff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(px + 30, py + 24, 4, 12);
+            }
         }
     }
 }
@@ -194,16 +402,25 @@ class Enemy extends Entity {
         if (type === 'skeleton') { this.hp = 20; this.color = '#eee'; }
         if (type === 'archer') { this.hp = 15; this.color = '#888'; }
         if (type === 'mummy') { this.hp = 30; this.color = '#d4c4a0'; }
-        if (type === 'boss') { this.hp = 100; this.color = '#d04648'; this.maxHp = 100; }
+        if (type === 'boss_ogre') { this.hp = 100; this.color = '#8b4513'; this.maxHp = 100; }
+        if (type === 'boss_spider') { this.hp = 80; this.color = '#4a1a4a'; this.maxHp = 80; }
         this.maxHp = this.hp;
 
+        this.archetype = 'chaser';
+        if (['archer', 'skeleton'].includes(type)) this.archetype = 'ranger';
+        if (['goblin'].includes(type)) this.archetype = 'coward';
+        if (type.startsWith('boss')) this.archetype = 'boss';
+
         this.state = 'IDLE';
+        this.bossTimer = 0;
         this.alerted = false;
         this.attackTarget = null;
     }
 
     takeTurn() {
         if (this.dead) return;
+        if (this.game.player.invisible > 0) { this.state = 'IDLE'; return; }
+
         const dist = Math.abs(this.x - this.game.player.x) + Math.abs(this.y - this.game.player.y);
 
         if (this.state === 'COOLDOWN') { this.state = 'CHASE'; return; }
@@ -221,17 +438,46 @@ class Enemy extends Entity {
         }
 
         if (this.state === 'CHASE') {
-            // Ranged Logic (Archer, Skeleton)
-            if (['archer', 'skeleton'].includes(this.type)) {
-                let dx = this.game.player.x - this.x;
-                let dy = this.game.player.y - this.y;
-                if ((dx === 0 || dy === 0) && dist <= 6) {
-                    if (this.hasLineOfSight(this.game.player.x, this.game.player.y)) {
+            if (this.archetype === 'boss') {
+                this.bossTimer++;
+                if (this.type === 'boss_ogre') {
+                    if (dist === 1 && this.bossTimer >= 3) {
                         this.state = 'PREPARE';
-                        this.attackTarget = { x: this.game.player.x, y: this.game.player.y, type: 'ranged' };
-                        this.game.playSound('step');
+                        this.attackTarget = { x: this.game.player.x, y: this.game.player.y, type: 'smash' }; // New Smash attack
+                        this.bossTimer = 0;
+                        this.game.addText(this.x*TILE_SIZE, this.y*TILE_SIZE, "ROAR!", '#ff0000');
                         return;
                     }
+                } else if (this.type === 'boss_spider') {
+                    if (this.bossTimer >= 4) {
+                        // Spawn Spiderling
+                        let t = this.game.getEmptyTileNear(this.x, this.y);
+                        if (t) {
+                            this.game.entities.push(new Enemy(this.game, t.x, t.y, 'bat')); // Use Bat as spiderling for now
+                            this.game.addText(this.x*TILE_SIZE, this.y*TILE_SIZE, "SPAWN!", '#00ff00');
+                        }
+                        this.bossTimer = 0;
+                    }
+                }
+            }
+
+            if (this.archetype === 'ranger') {
+                // Try to keep distance 4
+                if (dist <= 6 && this.hasLineOfSight(this.game.player.x, this.game.player.y)) {
+                    // Attack if good shot
+                    this.state = 'PREPARE';
+                    this.attackTarget = { x: this.game.player.x, y: this.game.player.y, type: 'ranged' };
+                    return;
+                }
+                if (dist < 4) {
+                    // Flee
+                    this.moveAwayFromPlayer();
+                    return;
+                }
+            } else if (this.archetype === 'coward') {
+                if (this.hp < this.maxHp * 0.5) {
+                    this.moveAwayFromPlayer();
+                    return;
                 }
             }
 
@@ -243,6 +489,21 @@ class Enemy extends Entity {
                 this.moveTowardsPlayer();
             }
         }
+    }
+
+    moveAwayFromPlayer() {
+        let best = { x: this.x, y: this.y, val: -1 };
+        [[0, 1], [0, -1], [1, 0], [-1, 0]].forEach(([dx, dy]) => {
+            let nx = this.x + dx, ny = this.y + dy;
+            if (nx >= 0 && nx < this.game.mapW && ny >= 0 && ny < this.game.mapH && this.game.map[ny][nx] === 0) {
+                if (!this.game.entities.find(e => e.x === nx && e.y === ny)) {
+                    // Use scent map: higher value = further from player
+                    let val = this.game.scent[ny]?.[nx] ?? 0;
+                    if (val > best.val) best = { x: nx, y: ny, val };
+                }
+            }
+        });
+        if (best.val !== -1) { this.x = best.x; this.y = best.y; }
     }
 
     hasLineOfSight(tx, ty) {
@@ -276,6 +537,18 @@ class Enemy extends Entity {
         if (this.attackTarget.type === 'ranged') {
             this.game.addParticles(this.attackTarget.x * TILE_SIZE + 24, this.attackTarget.y * TILE_SIZE + 24, '#ff0000', 5);
         }
+        if (this.attackTarget.type === 'smash') { // Ogre Smash
+             for(let dy=-1; dy<=1; dy++) {
+                 for(let dx=-1; dx<=1; dx++) {
+                     if (Math.abs(this.game.player.x - (this.attackTarget.x+dx)) < 0.1 && Math.abs(this.game.player.y - (this.attackTarget.y+dy)) < 0.1) {
+                         this.game.attack(this, this.game.player);
+                     }
+                     this.game.addParticles((this.attackTarget.x+dx) * TILE_SIZE + 24, (this.attackTarget.y+dy) * TILE_SIZE + 24, '#ff0000', 5);
+                 }
+             }
+             return;
+        }
+
         if (this.game.player.x === this.attackTarget.x && this.game.player.y === this.attackTarget.y) {
             this.game.attack(this, this.game.player);
         } else {
@@ -328,6 +601,11 @@ class Game {
         this.player = new Player(this);
         this.camera = { x: 0, y: 0 };
         this.shake = 0;
+
+        this.inputState = 'NORMAL'; // NORMAL, TARGETING
+        this.targetCursor = { x: 0, y: 0 };
+        this.selectedSlot = -1;
+
         const urlParams = new URLSearchParams(window.location.search);
         let seed = urlParams.get('seed') ? parseInt(urlParams.get('seed')) : Date.now();
         this.baseSeed = seed;
@@ -365,8 +643,36 @@ class Game {
     bindInput() {
         this.keys = {};
         window.addEventListener('keydown', e => {
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'w', 'a', 's', 'd', 'q', '1', '2', '3'].includes(e.key)) e.preventDefault();
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'w', 'a', 's', 'd', 'q', '1', '2', '3', 't', 'Enter'].includes(e.key)) e.preventDefault();
             this.keys[e.key] = true;
+
+            if (this.inputState === 'TARGETING') {
+                if (e.key === 'Escape') {
+                    this.inputState = 'NORMAL';
+                    this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "CANCEL", '#aaa');
+                } else if (e.key === 'Enter' || e.key === ' ') {
+                    this.throwItem();
+                } else {
+                    let dx=0, dy=0;
+                    if (e.key==='ArrowUp'||e.key==='w') dy=-1;
+                    else if (e.key==='ArrowDown'||e.key==='s') dy=1;
+                    else if (e.key==='ArrowLeft'||e.key==='a') dx=-1;
+                    else if (e.key==='ArrowRight'||e.key==='d') dx=1;
+
+                    this.targetCursor.x += dx;
+                    this.targetCursor.y += dy;
+                }
+                return;
+            }
+
+            if (e.key === 't') {
+                this.inputState = 'TARGETING';
+                this.targetCursor = {x: this.player.x, y: this.player.y};
+                this.selectedSlot = 0; // Default to first slot or currently highlighted
+                this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "AIM!", '#fff');
+                return;
+            }
+
             this.player.inputBuffer = e.key;
             if (e.key === 'q') this.player.useSkill();
             if (['1','2','3'].includes(e.key)) this.useItem(parseInt(e.key)-1);
@@ -381,13 +687,15 @@ class Game {
         this.biome = biome;
         this.depth = 1;
         this.player = new Player(this);
-        let cls = localStorage.getItem('selectedClass') || 'knight';
-        if (cls === 'warrior') cls = 'knight';
-        if (cls === 'mage') cls = 'wizard';
-        this.player.class = cls;
-        if (this.player.class === 'knight') { this.player.maxHp = 60; this.player.hp = 60; this.player.weapon = {name:'Iron Sword', rarity:'common', dmg:3}; }
-        if (this.player.class === 'rogue') { this.player.maxHp = 40; this.player.hp = 40; this.player.weapon = {name:'Dagger', rarity:'common', dmg:2}; }
-        if (this.player.class === 'wizard') { this.player.maxHp = 30; this.player.hp = 30; this.player.weapon = {name:'Staff', rarity:'common', dmg:1}; }
+        let cls = localStorage.getItem('selectedClass') || 'warrior';
+
+        // Migration of old saves
+        if (cls === 'knight') cls = 'warrior';
+        if (cls === 'wizard') cls = 'mage';
+        if (!CLASSES[cls]) cls = 'warrior';
+
+        this.player.initClass(cls);
+
         this.generateLevel();
         this.active = true;
         this.updateUI();
@@ -434,6 +742,8 @@ class Game {
     }
 
     movePlayer(dx, dy) {
+        if (this.player.class === 'ranger') this.player.focus = 0; // Ranger mechanic reset
+
         let nx = this.player.x + dx, ny = this.player.y + dy;
         if (nx<0||nx>=this.mapW||ny<0||ny>=this.mapH) return;
         let target = this.entities.find(e => e.x === nx && e.y === ny);
@@ -450,23 +760,151 @@ class Game {
         let itemIdx = this.items.findIndex(i => i.x === nx && i.y === ny);
         if (itemIdx !== -1) { this.collect(this.items[itemIdx]); this.items.splice(itemIdx, 1); }
         let trap = this.traps.find(t => t.x === nx && t.y === ny);
-        if (trap) { trap.triggered = true; this.player.takeDamage(5, 'trap'); this.addText(nx*TILE_SIZE, ny*TILE_SIZE, "TRAP!", '#f00'); }
+        if (trap) {
+            trap.triggered = true;
+            if (trap.type === 'spike') {
+                this.player.takeDamage(5, 'trap');
+                this.addText(nx*TILE_SIZE, ny*TILE_SIZE, "SPIKES!", '#f00');
+            } else if (trap.type === 'root') {
+                this.addText(nx*TILE_SIZE, ny*TILE_SIZE, "ROOTED!", '#6daa2c');
+                this.player.moving = true; // Wait animation
+                this.player.timer = 15; // Stuck for longer
+            } else {
+                this.player.takeDamage(5, 'trap');
+                this.addText(nx*TILE_SIZE, ny*TILE_SIZE, "TRAP!", '#f00');
+            }
+        }
         this.updateFOV();
         this.processTurn();
     }
 
     processTurn() {
         this.updateScentMap();
+
+        // Update Traps (Damage Enemies + Life)
+        this.traps = this.traps.filter(t => {
+            // Apply effect to enemies on tile
+            let enemy = this.entities.find(e => e.x === t.x && e.y === t.y);
+            if (enemy) {
+                if (t.type === 'fire') {
+                    enemy.takeDamage(5, 'fire');
+                    this.addParticles(t.x*TILE_SIZE+24, t.y*TILE_SIZE+24, '#ff4400', 3);
+                } else if (t.type === 'gas') {
+                    enemy.takeDamage(3, 'poison');
+                    this.addParticles(t.x*TILE_SIZE+24, t.y*TILE_SIZE+24, '#00ff00', 3);
+                } else if (t.type === 'spike') {
+                    enemy.takeDamage(5, 'trap');
+                }
+            }
+            // Decrement life for temporary traps (fire/gas)
+            if (t.life !== undefined) {
+                t.life--;
+                return t.life > 0;
+            }
+            return true;
+        });
+
+        // Counters
+        if (this.player.invincible > 0) this.player.invincible--;
+        if (this.player.undying > 0) this.player.undying--;
+        if (this.player.invisible > 0) this.player.invisible--;
+        if (this.player.fireImmunity > 0) this.player.fireImmunity--;
+
+        // Passives
+        if (this.player.class === 'ranger') {
+            this.player.focus = Math.min(5, this.player.focus + 1);
+        }
+        if (this.player.class === 'elementalist') {
+            const cycle = ['fire', 'ice', 'storm'];
+            let idx = cycle.indexOf(this.player.attunement);
+            this.player.attunement = cycle[(idx + 1) % 3];
+            this.addText(this.player.vx*TILE_SIZE, this.player.vy*TILE_SIZE - 20, this.player.attunement.toUpperCase(), '#888');
+        }
+        if (this.player.class === 'mage') {
+             // Burn if high heat
+             if (this.player.heat > 5) {
+                 this.player.takeDamage(2, 'burn');
+                 this.addText(this.player.vx*TILE_SIZE, this.player.vy*TILE_SIZE, "BURN", '#ff4400');
+             }
+             this.player.heat = Math.max(0, this.player.heat - 1);
+        }
+
         this.entities.forEach(e => e.takeTurn());
         if (this.player.skillCooldown > 0) this.player.skillCooldown--;
         this.updateUI();
     }
 
+    // Helper to find valid spawn
+    getEmptyTileNear(x, y) {
+        let best = null;
+        [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]].sort(()=>Math.random()-0.5).forEach(([dx, dy]) => {
+             let nx=x+dx, ny=y+dy;
+             if (nx>=0 && nx<this.mapW && ny>=0 && ny<this.mapH && this.map[ny][nx] === 0) {
+                 if (!this.entities.find(e => e.x === nx && e.y === ny) && (nx!==this.player.x || ny!==this.player.y)) {
+                     best = {x:nx, y:ny};
+                 }
+             }
+        });
+        return best;
+    }
+
     attack(attacker, defender) {
         let dmg = attacker.dmg;
-        if (attacker === this.player && this.player.weapon && this.player.weapon.element) {
-            this.addText(defender.vx*TILE_SIZE, defender.vy*TILE_SIZE, this.player.weapon.element.toUpperCase() + "!", '#fa0');
+
+        if (attacker === this.player) {
+            // Warrior Grit Mechanic
+            if (this.player.class === 'warrior' && this.player.grit >= 5) {
+                this.player.grit = 0;
+                this.addText(attacker.vx*TILE_SIZE, attacker.vy*TILE_SIZE, "TRUE DMG!", '#ffd700');
+                // True Damage: Ignore armor? Current game has no armor mechanic, so we just boost dmg significantly.
+                dmg = Math.max(dmg, 10); // Minimum 10 damage
+            }
+
+            // Weapon Charge Mechanic
+            if (this.player.weapon) {
+                this.player.weapon.charge = Math.min(this.player.weapon.maxCharge, (this.player.weapon.charge || 0) + 1);
+                if (this.player.weapon.charge >= this.player.weapon.maxCharge) {
+                    this.player.weapon.charge = 0;
+                    this.playSound('levelup');
+
+                    let wName = this.player.weapon.name.toLowerCase();
+                    if (wName.includes('sword')) {
+                        this.addText(attacker.vx*TILE_SIZE, attacker.vy*TILE_SIZE, "CRIT!", '#ff0000');
+                        dmg *= 2;
+                    } else if (wName.includes('dagger')) {
+                        if (defender.hp < defender.maxHp * 0.3 && defender.type !== 'boss') {
+                            this.addText(attacker.vx*TILE_SIZE, attacker.vy*TILE_SIZE, "EXECUTE!", '#555');
+                            dmg = defender.hp + 10;
+                        } else {
+                            this.addText(attacker.vx*TILE_SIZE, attacker.vy*TILE_SIZE, "STAB!", '#aaa');
+                            dmg *= 1.5;
+                        }
+                    } else if (wName.includes('spear') || wName.includes('staff')) {
+                        this.addText(attacker.vx*TILE_SIZE, attacker.vy*TILE_SIZE, "PIERCE!", '#00ff00');
+                        // Hit enemy behind?
+                        let dx = Math.sign(defender.x - attacker.x);
+                        let dy = Math.sign(defender.y - attacker.y);
+                        let nx = defender.x + dx, ny = defender.y + dy;
+                        let behind = this.entities.find(e => e.x === nx && e.y === ny);
+                        if (behind) {
+                            this.addText(behind.vx*TILE_SIZE, behind.vy*TILE_SIZE, "PIERCED!", '#00ff00');
+                            behind.takeDamage(dmg, 'pierce');
+                        }
+                    } else if (wName.includes('wand')) {
+                        this.addText(attacker.vx*TILE_SIZE, attacker.vy*TILE_SIZE, "SIPHON!", '#00ffff');
+                        this.player.skillCooldown = Math.max(0, this.player.skillCooldown - 5);
+                        dmg *= 1.2;
+                    } else {
+                        this.addText(attacker.vx*TILE_SIZE, attacker.vy*TILE_SIZE, "CHARGE!", '#fff');
+                        dmg *= 1.5;
+                    }
+                }
+            }
+
+            if (this.player.class === 'mage') this.player.heat += 2;
+            if (this.player.class === 'rogue') this.player.comboPoints = Math.min(5, this.player.comboPoints + 1);
         }
+
         defender.takeDamage(dmg);
         this.shake = 5;
         this.playSound('hit');
@@ -484,7 +922,12 @@ class Game {
 
     dropLoot(x, y) {
         let r = this.random();
-        if (r < 0.6) this.items.push({x, y, type: 'potion', rarity:'common'});
+        if (r < 0.6) {
+            // New Potions Logic
+            const potions = ['Health', 'Fire', 'Invis', 'Toxic'];
+            const pType = potions[Math.floor(this.random() * potions.length)];
+            this.items.push({x, y, type: 'potion', pType: pType, rarity:'common'});
+        }
         else if (r < 0.9) this.items.push({x, y, type: 'weapon', rarity:'common'});
         else this.items.push({x, y, type: 'weapon', rarity:'rare'});
     }
@@ -497,16 +940,25 @@ class Game {
                 if (!this.player.inventory[i]) {
                     this.player.inventory[i] = item;
                     added = true;
-                    this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "Got Potion", '#0f0');
+                    this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "Got " + (item.pType || "Potion"), '#0f0');
                     break;
                 }
             }
             if (!added) {
-                this.player.hp = Math.min(this.player.maxHp, this.player.hp + 20);
-                this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "+20 HP", '#0f0');
+                // Auto consume if full? Or just fail? Original code auto-consumed health.
+                // Let's keep auto-consume health if it is a health potion
+                if (item.pType === 'Health' || !item.pType) {
+                    this.player.hp = Math.min(this.player.maxHp, this.player.hp + 20);
+                    this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "+20 HP", '#0f0');
+                } else {
+                    this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "Full!", '#f00');
+                }
             }
         } else if (item.type === 'weapon') {
-            this.player.weapon = { name: 'Sword', rarity: item.rarity, dmg: item.rarity==='rare'?5:3, element: this.random()<0.3 ? 'burn' : null };
+            let w = { name: 'Sword', rarity: item.rarity, dmg: item.rarity==='rare'?5:3, element: null, charge: 0, maxCharge: 5 };
+            let types = ['Sword', 'Dagger', 'Spear', 'Wand'];
+            w.name = types[Math.floor(this.random() * types.length)];
+            this.player.weapon = w;
             this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "Equipped " + this.player.weapon.name, '#ff0');
         } else if (item.type === 'chest') {
             this.depth++;
@@ -516,15 +968,89 @@ class Game {
     }
 
     useItem(slot) {
+        if (this.inputState === 'TARGETING') {
+            this.selectedSlot = slot;
+            this.updateUI();
+            return;
+        }
+
         if (this.player.inventory[slot]) {
             let item = this.player.inventory[slot];
             if (item.type === 'potion') {
-                this.player.hp = Math.min(this.player.maxHp, this.player.hp + 30);
-                this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "+30 HP", '#0f0');
+                const pType = item.pType || 'Health';
+
+                if (pType === 'Health') {
+                    this.player.hp = Math.min(this.player.maxHp, this.player.hp + 30);
+                    this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "+30 HP", '#0f0');
+                } else if (pType === 'Fire') {
+                    this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "Fire Immunity!", '#fa0');
+                    this.player.fireImmunity = 10;
+                } else if (pType === 'Invis') {
+                     this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "Invisible!", '#aaa');
+                     this.player.invisible = 5;
+                } else if (pType === 'Toxic') {
+                    // Drink to cure poison
+                    this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "Cured!", '#0f0');
+                }
             }
+
             this.player.inventory[slot] = null;
             this.updateUI();
         }
+    }
+
+    throwItem() {
+        if (this.selectedSlot < 0 || !this.player.inventory[this.selectedSlot]) {
+            this.inputState = 'NORMAL';
+            return;
+        }
+
+        let item = this.player.inventory[this.selectedSlot];
+        this.player.inventory[this.selectedSlot] = null;
+        this.inputState = 'NORMAL';
+
+        // Effects
+        let tx = this.targetCursor.x, ty = this.targetCursor.y;
+        this.addText(tx*TILE_SIZE, ty*TILE_SIZE, "SPLASH!", '#fff');
+
+        if (item.type === 'potion') {
+            let pType = item.pType || 'Health';
+            if (pType === 'Fire') {
+                // Create fire area 3x3
+                for(let dy=-1; dy<=1; dy++) {
+                    for(let dx=-1; dx<=1; dx++) {
+                        let nx=tx+dx, ny=ty+dy;
+                        this.traps.push({x:nx, y:ny, type:'fire', life:5}); // Temporary fire
+                        this.addParticles(nx*TILE_SIZE+24, ny*TILE_SIZE+24, '#ff4400', 5);
+                    }
+                }
+            } else if (pType === 'Toxic') {
+                // Poison cloud
+                for(let dy=-1; dy<=1; dy++) {
+                    for(let dx=-1; dx<=1; dx++) {
+                        let nx=tx+dx, ny=ty+dy;
+                        this.traps.push({x:nx, y:ny, type:'gas', life:10});
+                        this.addParticles(nx*TILE_SIZE+24, ny*TILE_SIZE+24, '#00ff00', 5);
+                    }
+                }
+            } else if (pType === 'Health') {
+                // Damage undead
+                let target = this.entities.find(e => e.x === tx && e.y === ty);
+                if (target && ['skeleton','mummy'].includes(target.type)) {
+                    target.takeDamage(20, 'holy');
+                    this.addText(tx*TILE_SIZE, ty*TILE_SIZE, "HOLY BURN!", '#ffff00');
+                }
+            } else if (pType === 'Invis') {
+                // Blind enemy?
+                let target = this.entities.find(e => e.x === tx && e.y === ty);
+                if (target) {
+                    target.state = 'IDLE';
+                    this.addText(tx*TILE_SIZE, ty*TILE_SIZE, "CONFUSED", '#aaa');
+                }
+            }
+        }
+
+        this.processTurn();
     }
 
     levelUp() {
@@ -538,8 +1064,11 @@ class Game {
 
     updateFOV() {
         for(let y=0; y<this.mapH; y++) this.visible[y].fill(false);
+        let radius = 10;
+        if (this.biome === 'desert') radius = 6; // Sandstorm
+
         const caster = new ShadowCaster((x,y) => x<0||x>=this.mapW||y<0||y>=this.mapH || this.map[y][x] === 1);
-        caster.compute(this.player.x, this.player.y, 10, (x, y) => {
+        caster.compute(this.player.x, this.player.y, radius, (x, y) => {
             if(x>=0 && x<this.mapW && y>=0 && y<this.mapH) {
                 this.visible[y][x] = true;
                 this.visited[y][x] = true;
@@ -576,6 +1105,19 @@ class Game {
         }
 
         this.entities = []; this.items = []; this.traps = [];
+
+        // Hazards
+        if (this.biome === 'forest') {
+            for(let i=0; i<8; i++) {
+                let t = this.getEmptyTile();
+                this.traps.push({x:t.x, y:t.y, type:'root'});
+            }
+        } else if (this.biome === 'dungeon') {
+            for(let i=0; i<8; i++) {
+                let t = this.getEmptyTile();
+                this.traps.push({x:t.x, y:t.y, type:'spike'});
+            }
+        }
         let start = this.getEmptyTile();
         this.player.x = start.x; this.player.y = start.y;
         this.player.vx = start.x; this.player.vy = start.y;
@@ -588,6 +1130,16 @@ class Game {
             if (Math.abs(t.x-this.player.x) < 5) continue;
             let type = this.getMobType();
             this.entities.push(new Enemy(this, t.x, t.y, type));
+        }
+
+        // Spawn Boss every 5 levels
+        if (this.depth % 5 === 0) {
+            let t = this.getEmptyTile();
+            let bossType = 'boss_ogre';
+            if (this.depth === 10) bossType = 'boss_spider';
+            // if (this.depth === 20) bossType = 'boss_worm';
+            this.entities.push(new Enemy(this, t.x, t.y, bossType));
+            this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "BOSS!", '#ff0000');
         }
 
         let exit = this.getEmptyTile();
@@ -702,6 +1254,18 @@ class Game {
             this.ctx.fillRect(p.x, p.y, 4, 4);
         });
 
+        // Draw Target Cursor
+        if (this.inputState === 'TARGETING') {
+            let tx = this.targetCursor.x * TILE_SIZE, ty = this.targetCursor.y * TILE_SIZE;
+            this.ctx.strokeStyle = '#00ff00';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            this.ctx.beginPath();
+            this.ctx.moveTo(tx, ty); this.ctx.lineTo(tx+TILE_SIZE, ty+TILE_SIZE);
+            this.ctx.moveTo(tx+TILE_SIZE, ty); this.ctx.lineTo(tx, ty+TILE_SIZE);
+            this.ctx.stroke();
+        }
+
         this.ctx.restore();
 
         if (this.mmCtx) {
@@ -723,10 +1287,26 @@ class Game {
 
     updateUI() {
         document.getElementById('slot-weapon').innerText = this.player.weapon ? '⚔️' : '';
+        // Charge Bar indicator
+        const weaponSlot = document.getElementById('slot-weapon');
+        if (this.player.weapon) {
+             let pct = (this.player.weapon.charge / this.player.weapon.maxCharge) * 100;
+             weaponSlot.style.background = `linear-gradient(to top, rgba(0,255,255,0.3) ${pct}%, transparent ${pct}%)`;
+        }
+
         for(let i=0; i<3; i++) {
             let slot = document.getElementById('slot-'+(i+1));
-            if (this.player.inventory[i]) {
-                slot.innerText = '🧪';
+            let item = this.player.inventory[i];
+            if (item) {
+                // Determine icon based on type
+                if (item.type === 'potion') {
+                    if (item.pType === 'Fire') slot.innerText = '🔥';
+                    else if (item.pType === 'Invis') slot.innerText = '👻';
+                    else if (item.pType === 'Toxic') slot.innerText = '🤢';
+                    else slot.innerText = '🧪'; // Health
+                } else {
+                    slot.innerText = '?';
+                }
                 slot.style.borderColor = '#fff';
             } else {
                 slot.innerText = (i+1);
@@ -737,6 +1317,14 @@ class Game {
 
     addText(x, y, text, color) { this.texts.push({x, y, text, color, life:50}); }
     addParticles(x, y, color, n) { for(let i=0; i<n; i++) this.particles.push({x, y, vx:(Math.random()-0.5)*5, vy:(Math.random()-0.5)*5, color, life:20}); }
+
+    // Add missing gameOver
+    gameOver() {
+        this.active = false;
+        document.getElementById('game-over').style.display = 'flex';
+        document.getElementById('ui-layer').style.display = 'none';
+        this.playSound('kill');
+    }
 }
 
 const game = new Game();

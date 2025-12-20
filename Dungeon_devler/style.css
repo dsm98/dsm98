@@ -66,7 +66,7 @@ canvas#gameCanvas {
     left: 0;
     right: 0;
     padding: 15px 20px;
-    display: none;
+    display: flex; /* Changed from none to flex */
     justify-content: space-between;
     align-items: flex-start;
     background: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), transparent);
@@ -86,6 +86,7 @@ canvas#gameCanvas {
     gap: 10px;
     font-size: 14px;
     font-weight: 600;
+    text-shadow: 1px 1px 2px black;
 }
 
 .stat-label {
@@ -146,7 +147,7 @@ canvas#gameCanvas {
 
 #menu-btn {
     top: 15px;
-    right: 150px;
+    right: 20px;
 }
 
 #power-btn {
@@ -175,21 +176,23 @@ canvas#gameCanvas {
 @media (max-width: 800px) {
     #menu-btn {
         right: 15px;
-        top: 70px;
+        top: 15px;
     }
 }
 
 /* Minimap */
 #minimap-container {
     position: fixed;
-    top: 80px;
-    right: 15px;
+    top: 15px; /* Moved up to align with stats */
+    right: 80px; /* Left of menu button */
     border: 2px solid #333;
     border-radius: 8px;
     background: #111;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     display: none;
     z-index: 90;
+    width: 120px;
+    height: 90px;
 }
 
 @media (min-width: 700px) {
@@ -200,16 +203,24 @@ canvas#gameCanvas {
 
 /* Touch Controls */
 #controls {
-    display: none;
+    display: none; /* Only show on touch? Logic handled in JS usually or media query */
     position: fixed;
     bottom: 25px;
-    left: 0;
-    right: 0;
-    justify-content: center;
-    align-items: center;
-    gap: 80px;
+    left: 20px; /* Moved to left corner */
     z-index: 100;
     pointer-events: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+    #controls {
+        display: flex;
+    }
+    #hud-bottom {
+        bottom: 25px;
+        right: 20px; /* Move HUD to right on mobile */
+        left: auto;
+        transform: none;
+    }
 }
 
 .dpad {
@@ -830,6 +841,7 @@ h1 {
     position: relative;
     color: #fff;
     box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+    text-shadow: 1px 1px 2px black;
 }
 
 .slot:hover {

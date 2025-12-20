@@ -1,20 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="description" content="Explore the Ancient Forest in Dungeon Delver - A roguelike adventure game">
-    <meta name="theme-color" content="#1a2e1a">
-    <title>Dungeon Delver - Ancient Forest</title>
+    <title>Dungeon Legends</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="forest.css">
 </head>
-
 <body>
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
         <div id="ui-layer">
+            <!-- Top Status Bar -->
             <div class="stat-group">
                 <div class="stat-row">
                     <span class="stat-label">❤️ HP</span>
@@ -30,18 +27,16 @@
                     </div>
                     <span id="val-xp" class="stat-value">0/50</span>
                 </div>
-                <div class="stat-row"><span class="stat-label">⭐ SCORE</span><span id="val-score"
-                        class="stat-value">0</span></div>
+                <div class="stat-row"><span class="stat-label">⭐ SCORE</span><span id="val-score" class="stat-value">0</span></div>
             </div>
             <div class="stat-group" style="text-align:right;">
-                <div class="stat-row"><span class="stat-label">🏆 LVL</span><span id="val-lvl"
-                        class="stat-value">1</span></div>
-                <div class="stat-row"><span class="stat-label">📍 DEPTH</span><span id="val-depth"
-                        class="stat-value">1</span></div>
-                <div class="stat-row"><span class="stat-label">💰 COINS</span><span id="val-coins"
-                        class="stat-value">0</span></div>
+                <div class="stat-row"><span class="stat-label">🏆 LVL</span><span id="val-lvl" class="stat-value">1</span></div>
+                <div class="stat-row"><span class="stat-label">📍 DEPTH</span><span id="val-depth" class="stat-value">1</span></div>
+                <div class="stat-row"><span class="stat-label">💰 COINS</span><span id="val-coins" class="stat-value">0</span></div>
             </div>
             <button id="menu-btn" class="ui-btn" onclick="game.togglePause()">☰</button>
+
+             <!-- Bottom HUD -->
              <div id="hud-bottom">
                 <div class="hud-group" id="weapon-display">
                     <div class="slot weapon-slot" id="slot-weapon">⚔️</div>
@@ -60,20 +55,23 @@
                 </div>
              </div>
         </div>
+
         <div id="log-container"></div>
         <canvas id="minimap-container" width="120" height="90"></canvas>
+
         <div id="game-over" class="menu-screen">
-            <h1>🌲 Nature Claims You</h1>
-            <div class="subtitle">The forest grows over your remains...</div>
-            <button class="menu-btn btn-forest" onclick="resetGame()">⚔️ Try Again</button>
-            <button class="menu-btn secondary" onclick="showMainMenu()">🏠 Main Menu</button>
+            <h1>💀 You Died</h1>
+            <div class="subtitle">The darkness claims another soul...</div>
+            <button class="menu-btn btn-dungeon" onclick="resetGame()">⚔️ Try Again</button>
+            <button class="menu-btn secondary" onclick="window.location.href='index.html'">🏠 Main Menu</button>
         </div>
+
         <div id="pause-menu" class="menu-screen">
             <h1>⏸️ Paused</h1>
-            <div class="subtitle">Press ESC to resume</div>
-            <button class="menu-btn btn-forest" onclick="resumeGame()">▶️ Resume</button>
-            <button class="menu-btn secondary" onclick="showMainMenu()">🏠 Main Menu</button>
+            <button class="menu-btn btn-dungeon" onclick="game.togglePause()">▶️ Resume</button>
+            <button class="menu-btn secondary" onclick="window.location.href='index.html'">🏠 Main Menu</button>
         </div>
+
         <div id="controls">
             <div class="dpad">
                 <div class="btn btn-up" data-key="ArrowUp">▲</div>
@@ -83,8 +81,10 @@
             </div>
         </div>
     </div>
-    <script src="script.js"></script>
-    <script>window.onload = () => game.start('forest');</script>
-</body>
 
+    <script src="script.js"></script>
+    <script>
+        game.start('forest');
+    </script>
+</body>
 </html>
