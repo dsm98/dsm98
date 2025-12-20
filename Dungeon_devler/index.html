@@ -7,7 +7,7 @@
     <meta name="description"
         content="Dungeon Delver - An epic roguelike adventure game. Explore mysterious dungeons, lush forests, and scorching deserts!">
     <meta name="theme-color" content="#0a0a0c">
-    <title>Dungeon Delver: Legends</title>
+    <title>Dungeon Legends</title>
     <link rel="stylesheet" href="style.css">
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔️</text></svg>">
@@ -46,8 +46,8 @@
         <div id="main-menu" class="menu-screen" style="display:flex">
             <div class="menu-header">
                 <div class="logo-icon">⚔️</div>
-                <h1>Dungeon Delver: Legends</h1>
-                <div class="subtitle">High-Performance Roguelike</div>
+                <h1>Dungeon Legends</h1>
+                <div class="subtitle">Tactical Roguelike</div>
             </div>
 
             <!-- Daily Challenge -->
@@ -62,20 +62,45 @@
             <div class="menu-section">
                 <h2>🦸 Choose Your Hero</h2>
                 <div class="class-grid">
-                    <div class="class-card selected" onclick="selectClass('knight')" id="class-knight">
+                    <div class="class-card" onclick="selectClass('warrior')" id="class-warrior">
                         <div class="class-icon">🛡️</div>
-                        <div class="class-title">Knight</div>
-                        <div class="class-desc">Tanky • Power Strike</div>
+                        <div class="class-title">Warrior</div>
+                        <div class="class-desc">Tank • Whirlwind</div>
+                    </div>
+                    <div class="class-card" onclick="selectClass('mage')" id="class-mage">
+                        <div class="class-icon">🔥</div>
+                        <div class="class-title">Mage</div>
+                        <div class="class-desc">Glass Cannon • Meteor</div>
                     </div>
                     <div class="class-card" onclick="selectClass('rogue')" id="class-rogue">
                         <div class="class-icon">🗡️</div>
                         <div class="class-title">Rogue</div>
-                        <div class="class-desc">Agile • Shadow Dash</div>
+                        <div class="class-desc">Assassin • Shadow Step</div>
                     </div>
-                    <div class="class-card" onclick="selectClass('wizard')" id="class-wizard">
-                        <div class="class-icon">🔮</div>
-                        <div class="class-title">Wizard</div>
-                        <div class="class-desc">Glass Cannon • Thunder Nova</div>
+                    <div class="class-card" onclick="selectClass('ranger')" id="class-ranger">
+                        <div class="class-icon">🏹</div>
+                        <div class="class-title">Ranger</div>
+                        <div class="class-desc">Sniper • Rain of Arrows</div>
+                    </div>
+                    <div class="class-card" onclick="selectClass('paladin')" id="class-paladin">
+                        <div class="class-icon">✨</div>
+                        <div class="class-title">Paladin</div>
+                        <div class="class-desc">Healer • Sanctuary</div>
+                    </div>
+                    <div class="class-card" onclick="selectClass('necromancer')" id="class-necromancer">
+                        <div class="class-icon">💀</div>
+                        <div class="class-title">Necromancer</div>
+                        <div class="class-desc">Summoner • Raise Army</div>
+                    </div>
+                    <div class="class-card" onclick="selectClass('berserker')" id="class-berserker">
+                        <div class="class-icon">🩸</div>
+                        <div class="class-title">Berserker</div>
+                        <div class="class-desc">High Risk • Undying Rage</div>
+                    </div>
+                    <div class="class-card" onclick="selectClass('elementalist')" id="class-elementalist">
+                        <div class="class-icon">🌀</div>
+                        <div class="class-title">Elementalist</div>
+                        <div class="class-desc">Utility • Chaos Storm</div>
                     </div>
                 </div>
             </div>
@@ -85,21 +110,18 @@
                 <div class="mission-grid">
                     <button class="mission-card forest" onclick="selectMission('forest')">
                         <div class="mission-icon">🌲</div>
-                        <div class="mission-title">Ancient Forest</div>
-                        <div class="mission-desc">Beginner • Explore nature</div>
-                        <div class="mission-enemies">Slimes • Spiders • Treants</div>
+                        <div class="mission-title">Enchanted Forest</div>
+                        <div class="mission-desc">Beginner • Entangling Roots</div>
                     </button>
                     <button class="mission-card desert" onclick="selectMission('desert')">
                         <div class="mission-icon">🏜️</div>
-                        <div class="mission-title">Scorched Sands</div>
-                        <div class="mission-desc">Moderate • Deadly heat</div>
-                        <div class="mission-enemies">Scorpions • Mummies • Sandworms</div>
+                        <div class="mission-title">Scorched Desert</div>
+                        <div class="mission-desc">Moderate • Sandstorms</div>
                     </button>
                     <button class="mission-card dungeon" onclick="selectMission('dungeon')">
                         <div class="mission-icon">💀</div>
-                        <div class="mission-title">Dark Depths</div>
-                        <div class="mission-desc">Hard • Classic dungeon</div>
-                        <div class="mission-enemies">Skeletons • Ghosts • Demons</div>
+                        <div class="mission-title">Ancient Dungeon</div>
+                        <div class="mission-desc">Hard • Hidden Spikes</div>
                     </button>
                 </div>
             </div>
@@ -173,20 +195,6 @@
                     <div class="shop-price">💰 50</div>
                     <div class="shop-level">Level: <span id="defense-level">0</span></div>
                 </div>
-                <div class="shop-item" onclick="buyUpgrade('dash')">
-                    <div class="shop-icon">💨</div>
-                    <div class="shop-name">Dash Attack</div>
-                    <div class="shop-desc">Press SPACE to dash</div>
-                    <div class="shop-price">💰 100</div>
-                    <div class="shop-level" id="dash-status">Not Owned</div>
-                </div>
-                <div class="shop-item" onclick="buyUpgrade('ranged')">
-                    <div class="shop-icon">🏹</div>
-                    <div class="shop-name">Ranged Attack</div>
-                    <div class="shop-desc">Press R to shoot</div>
-                    <div class="shop-price">💰 150</div>
-                    <div class="shop-level" id="ranged-status">Not Owned</div>
-                </div>
             </div>
             <button class="menu-btn secondary" onclick="hideShop()">← Back</button>
         </div>
@@ -213,9 +221,11 @@
     <script src="script.js"></script>
     <script>
         // Class Selection Logic
-        let selectedClass = localStorage.getItem('selectedClass') || 'knight';
-        if (selectedClass === 'warrior') selectedClass = 'knight';
-        if (selectedClass === 'mage') selectedClass = 'wizard';
+        let selectedClass = localStorage.getItem('selectedClass') || 'warrior';
+
+        // Migration of old selections
+        if (selectedClass === 'knight') selectedClass = 'warrior';
+        if (selectedClass === 'wizard') selectedClass = 'mage';
 
         function selectClass(cls) {
             selectedClass = cls;
@@ -229,6 +239,11 @@
 
         // Initialize Class Selection UI
         selectClass(selectedClass);
+
+        function selectMission(biome) {
+            // Need to handle missing biome files in future, for now standard ones
+            window.location.href = biome + '.html';
+        }
 
         function startDailyChallenge() {
             // Generate seed from date (YYYYMMDD)
@@ -298,19 +313,13 @@
             document.getElementById('shop-coins').textContent = game.totalCoins || 0;
             document.getElementById('attack-level').textContent = upgrades.attack || 0;
             document.getElementById('defense-level').textContent = upgrades.defense || 0;
-            document.getElementById('dash-status').textContent = upgrades.dash ? '✅ Owned' : 'Not Owned';
-            document.getElementById('ranged-status').textContent = upgrades.ranged ? '✅ Owned' : 'Not Owned';
         }
         function buyUpgrade(type) {
             const upgrades = JSON.parse(localStorage.getItem('upgrades') || '{}');
-            let cost = (type === 'dash') ? 100 : (type === 'ranged') ? 150 : 50;
+            let cost = 50;
 
             if (game.totalCoins < cost) {
                 alert('Not enough coins!');
-                return;
-            }
-            if ((type === 'dash' || type === 'ranged') && upgrades[type]) {
-                alert('Already owned!');
                 return;
             }
 
@@ -319,8 +328,6 @@
 
             if (type === 'attack' || type === 'defense') {
                 upgrades[type] = (upgrades[type] || 0) + 1;
-            } else {
-                upgrades[type] = true;
             }
             localStorage.setItem('upgrades', JSON.stringify(upgrades));
             updateShop();
