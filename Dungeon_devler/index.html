@@ -44,96 +44,99 @@
 
         <!-- Main Menu -->
         <div id="main-menu" class="menu-screen" style="display:flex">
-            <div class="menu-header">
-                <div class="logo-icon">⚔️</div>
-                <h1>Dungeon Legends</h1>
-                <div class="subtitle">Tactical Roguelike</div>
-            </div>
-
-            <!-- Daily Challenge -->
-            <div class="menu-section" style="margin-bottom: 20px;">
-                <button class="menu-btn btn-daily" onclick="startDailyChallenge()">
-                    📅 Daily Challenge
-                    <div style="font-size: 0.8em; font-weight: normal; margin-top: 5px;">Compete on today's seed!</div>
-                </button>
-            </div>
-
-            <!-- Class Selection -->
-            <div class="menu-section">
-                <h2>🦸 Choose Your Hero</h2>
-                <div class="class-grid">
-                    <div class="class-card" onclick="selectClass('warrior')" id="class-warrior">
-                        <div class="class-icon">🛡️</div>
-                        <div class="class-title">Warrior</div>
-                        <div class="class-desc">Tank • Whirlwind</div>
-                    </div>
-                    <div class="class-card" onclick="selectClass('mage')" id="class-mage">
-                        <div class="class-icon">🔥</div>
-                        <div class="class-title">Mage</div>
-                        <div class="class-desc">Glass Cannon • Meteor</div>
-                    </div>
-                    <div class="class-card" onclick="selectClass('rogue')" id="class-rogue">
-                        <div class="class-icon">🗡️</div>
-                        <div class="class-title">Rogue</div>
-                        <div class="class-desc">Assassin • Shadow Step</div>
-                    </div>
-                    <div class="class-card" onclick="selectClass('ranger')" id="class-ranger">
-                        <div class="class-icon">🏹</div>
-                        <div class="class-title">Ranger</div>
-                        <div class="class-desc">Sniper • Rain of Arrows</div>
-                    </div>
-                    <div class="class-card" onclick="selectClass('paladin')" id="class-paladin">
-                        <div class="class-icon">✨</div>
-                        <div class="class-title">Paladin</div>
-                        <div class="class-desc">Healer • Sanctuary</div>
-                    </div>
-                    <div class="class-card" onclick="selectClass('necromancer')" id="class-necromancer">
-                        <div class="class-icon">💀</div>
-                        <div class="class-title">Necromancer</div>
-                        <div class="class-desc">Summoner • Raise Army</div>
-                    </div>
-                    <div class="class-card" onclick="selectClass('berserker')" id="class-berserker">
-                        <div class="class-icon">🩸</div>
-                        <div class="class-title">Berserker</div>
-                        <div class="class-desc">High Risk • Undying Rage</div>
-                    </div>
-                    <div class="class-card" onclick="selectClass('elementalist')" id="class-elementalist">
-                        <div class="class-icon">🌀</div>
-                        <div class="class-title">Elementalist</div>
-                        <div class="class-desc">Utility • Chaos Storm</div>
-                    </div>
+            <canvas id="menu-bg"></canvas>
+            <div class="menu-content">
+                <div class="menu-header">
+                    <div class="logo-icon">⚔️</div>
+                    <h1>Dungeon Legends</h1>
+                    <div class="subtitle">Tactical Roguelike</div>
                 </div>
-            </div>
 
-            <div class="menu-section">
-                <h2>🗺️ Choose Your Adventure</h2>
-                <div class="mission-grid">
-                    <button class="mission-card forest" onclick="selectMission('forest')">
-                        <div class="mission-icon">🌲</div>
-                        <div class="mission-title">Enchanted Forest</div>
-                        <div class="mission-desc">Beginner • Entangling Roots</div>
-                    </button>
-                    <button class="mission-card desert" onclick="selectMission('desert')">
-                        <div class="mission-icon">🏜️</div>
-                        <div class="mission-title">Scorched Desert</div>
-                        <div class="mission-desc">Moderate • Sandstorms</div>
-                    </button>
-                    <button class="mission-card dungeon" onclick="selectMission('dungeon')">
-                        <div class="mission-icon">💀</div>
-                        <div class="mission-title">Ancient Dungeon</div>
-                        <div class="mission-desc">Hard • Hidden Spikes</div>
+                <!-- Daily Challenge -->
+                <div class="menu-section" style="margin-bottom: 20px;">
+                    <button class="menu-btn btn-daily" onclick="startDailyChallenge()">
+                        📅 Daily Challenge
+                        <div style="font-size: 0.8em; font-weight: normal; margin-top: 5px;">Compete on today's seed!</div>
                     </button>
                 </div>
-            </div>
 
-            <div class="menu-buttons">
-                <button class="menu-btn secondary" onclick="showLeaderboard()">🏆 Leaderboard</button>
-                <button class="menu-btn secondary" onclick="showSettings()">⚙️ Settings</button>
-                <button class="menu-btn secondary" onclick="showShop()">🛒 Shop</button>
-            </div>
+                <!-- Class Selection -->
+                <div class="menu-section">
+                    <h2>🦸 Choose Your Hero</h2>
+                    <div class="class-grid">
+                        <div class="class-card" onclick="selectClass('warrior')" id="class-warrior">
+                            <div class="class-icon">🛡️</div>
+                            <div class="class-title">Warrior</div>
+                            <div class="class-desc">Tank • Whirlwind</div>
+                        </div>
+                        <div class="class-card" onclick="selectClass('mage')" id="class-mage">
+                            <div class="class-icon">🔥</div>
+                            <div class="class-title">Mage</div>
+                            <div class="class-desc">Glass Cannon • Meteor</div>
+                        </div>
+                        <div class="class-card" onclick="selectClass('rogue')" id="class-rogue">
+                            <div class="class-icon">🗡️</div>
+                            <div class="class-title">Rogue</div>
+                            <div class="class-desc">Assassin • Shadow Step</div>
+                        </div>
+                        <div class="class-card" onclick="selectClass('ranger')" id="class-ranger">
+                            <div class="class-icon">🏹</div>
+                            <div class="class-title">Ranger</div>
+                            <div class="class-desc">Sniper • Rain of Arrows</div>
+                        </div>
+                        <div class="class-card" onclick="selectClass('paladin')" id="class-paladin">
+                            <div class="class-icon">✨</div>
+                            <div class="class-title">Paladin</div>
+                            <div class="class-desc">Healer • Sanctuary</div>
+                        </div>
+                        <div class="class-card" onclick="selectClass('necromancer')" id="class-necromancer">
+                            <div class="class-icon">💀</div>
+                            <div class="class-title">Necromancer</div>
+                            <div class="class-desc">Summoner • Raise Army</div>
+                        </div>
+                        <div class="class-card" onclick="selectClass('berserker')" id="class-berserker">
+                            <div class="class-icon">🩸</div>
+                            <div class="class-title">Berserker</div>
+                            <div class="class-desc">High Risk • Undying Rage</div>
+                        </div>
+                        <div class="class-card" onclick="selectClass('elementalist')" id="class-elementalist">
+                            <div class="class-icon">🌀</div>
+                            <div class="class-title">Elementalist</div>
+                            <div class="class-desc">Utility • Chaos Storm</div>
+                        </div>
+                    </div>
+                </div>
 
-            <div class="menu-footer">
-                <div class="total-coins">💰 Total Coins: <span id="total-coins">0</span></div>
+                <div class="menu-section">
+                    <h2>🗺️ Choose Your Adventure</h2>
+                    <div class="mission-grid">
+                        <button class="mission-card forest" onclick="selectMission('forest')">
+                            <div class="mission-icon">🌲</div>
+                            <div class="mission-title">Enchanted Forest</div>
+                            <div class="mission-desc">Beginner • Entangling Roots</div>
+                        </button>
+                        <button class="mission-card desert" onclick="selectMission('desert')">
+                            <div class="mission-icon">🏜️</div>
+                            <div class="mission-title">Scorched Desert</div>
+                            <div class="mission-desc">Moderate • Sandstorms</div>
+                        </button>
+                        <button class="mission-card dungeon" onclick="selectMission('dungeon')">
+                            <div class="mission-icon">💀</div>
+                            <div class="mission-title">Ancient Dungeon</div>
+                            <div class="mission-desc">Hard • Hidden Spikes</div>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="menu-buttons">
+                    <button class="menu-btn secondary" onclick="showLeaderboard()">🏆 Leaderboard</button>
+                    <button class="menu-btn secondary" onclick="showSettings()">⚙️ Settings</button>
+                    <button class="menu-btn secondary" onclick="showShop()">🛒 Shop</button>
+                </div>
+
+                <div class="menu-footer">
+                    <div class="total-coins">💰 Total Coins: <span id="total-coins">0</span></div>
+                </div>
             </div>
         </div>
 

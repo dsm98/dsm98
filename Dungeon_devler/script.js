@@ -558,6 +558,19 @@ class Enemy extends Entity {
 
     draw(ctx) {
         let px = this.vx * TILE_SIZE, py = this.vy * TILE_SIZE;
+
+        // Attack Bump Animation
+        if (this.bumpX !== undefined && this.bumpX !== 0) {
+            px += this.bumpX;
+            this.bumpX *= 0.8;
+            if (Math.abs(this.bumpX) < 0.5) this.bumpX = 0;
+        }
+        if (this.bumpY !== undefined && this.bumpY !== 0) {
+            py += this.bumpY;
+            this.bumpY *= 0.8;
+            if (Math.abs(this.bumpY) < 0.5) this.bumpY = 0;
+        }
+
         if (this.state === 'PREPARE') {
             ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.moveTo(px + 12, py - 5); ctx.lineTo(px + 36, py - 5); ctx.lineTo(px + 24, py + 5); ctx.fill();
             if (this.attackTarget && this.attackTarget.type === 'ranged') {
@@ -568,7 +581,7 @@ class Enemy extends Entity {
             }
         }
 
-        ctx.fillStyle = this.type === 'boss' ? this.color : (this.state === 'PREPARE' ? '#ff4444' : this.color);
+        ctx.fillStyle = this.type.startsWith('boss') ? this.color : (this.state === 'PREPARE' ? '#ff4444' : this.color);
         if (this.type === 'slime') {
             let b = Math.sin(this.game.tick * 0.15) * 2;
             ctx.beginPath(); ctx.ellipse(px + 24, py + 30 + b, 14, 12-b/2, 0, 0, Math.PI*2); ctx.fill();
@@ -743,7 +756,11 @@ class Game {
         this.particles = this.particles.filter(p => p.life > 0);
         this.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life--; p.vy += 0.2; });
         this.texts = this.texts.filter(t => t.life > 0);
-        this.texts.forEach(t => { t.y -= 0.5; t.life--; });
+        this.texts.forEach(t => {
+            t.y += t.vy;
+            t.vy *= 0.95; // Drag
+            t.life--;
+        });
         if (this.shake > 0) this.shake *= 0.85;
     }
 
@@ -856,6 +873,12 @@ class Game {
 
     attack(attacker, defender) {
         let dmg = attacker.dmg;
+
+        // Visual Bump
+        let dx = Math.sign(defender.x - attacker.x);
+        let dy = Math.sign(defender.y - attacker.y);
+        attacker.bumpX = dx * 10;
+        attacker.bumpY = dy * 10;
 
         if (attacker === this.player) {
             // Warrior Grit Mechanic
@@ -1071,7 +1094,9 @@ class Game {
     updateFOV() {
         for(let y=0; y<this.mapH; y++) this.visible[y].fill(false);
         let radius = 10;
-        if (this.biome === 'desert') radius = 6; // Sandstorm
+        // Torch Flicker
+        if (this.random() < 0.1) radius += (this.random() > 0.5 ? 1 : -1);
+        if (this.biome === 'desert') radius = Math.min(radius, 6); // Sandstorm cap
 
         const caster = new ShadowCaster((x,y) => x<0||x>=this.mapW||y<0||y>=this.mapH || this.map[y][x] === 1);
         caster.compute(this.player.x, this.player.y, radius, (x, y) => {
@@ -1209,10 +1234,14 @@ class Game {
         let cWall = COLORS[pal+'_wall'];
         let cTop = COLORS[pal+'_top'];
 
-        let startX = Math.floor(this.player.vx - 15);
-        let startY = Math.floor(this.player.vy - 12);
-        let endX = startX + 30;
-        let endY = startY + 25;
+        // Optimize rendering bounds based on canvas size
+        let tilesX = Math.ceil(this.width / TILE_SIZE) + 2;
+        let tilesY = Math.ceil(this.height / TILE_SIZE) + 2;
+
+        let startX = Math.floor(this.player.vx - tilesX/2);
+        let startY = Math.floor(this.player.vy - tilesY/2);
+        let endX = startX + tilesX;
+        let endY = startY + tilesY;
 
         this.entities.sort((a,b) => a.y - b.y);
 
@@ -1321,8 +1350,22 @@ class Game {
         }
     }
 
-    addText(x, y, text, color) { this.texts.push({x, y, text, color, life:50}); }
-    addParticles(x, y, color, n) { for(let i=0; i<n; i++) this.particles.push({x, y, vx:(Math.random()-0.5)*5, vy:(Math.random()-0.5)*5, color, life:20}); }
+    addText(x, y, text, color) {
+        this.texts.push({
+            x, y, text, color, life:50,
+            vy: -1 - Math.random() // Upward float
+        });
+    }
+    addParticles(x, y, color, n) {
+        for(let i=0; i<n; i++) {
+            this.particles.push({
+                x, y,
+                vx:(Math.random()-0.5)*5,
+                vy:(Math.random()-0.5)*5,
+                color, life:20
+            });
+        }
+    }
 
     // Add missing gameOver
     gameOver() {
@@ -1337,3 +1380,39 @@ const game = new Game();
 function resetGame() { game.start('dungeon'); }
 function startDailyChallenge() { window.location.href = `?daily=true&seed=${new Date().toISOString().slice(0,10).replace(/-/g,'')}`; }
 function selectClass(c) { localStorage.setItem('selectedClass', c); document.querySelectorAll('.class-card').forEach(el=>el.classList.remove('selected')); document.getElementById('class-'+c).classList.add('selected'); }
+
+// --- Menu Enhancements ---
+function initMenuAnimation() {
+    const canvas = document.getElementById('menu-bg');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let particles = [];
+    for(let i=0; i<50; i++) {
+        particles.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            vy: 0.5 + Math.random(),
+            size: 1 + Math.random() * 2
+        });
+    }
+
+    function animate() {
+        ctx.fillStyle = '#0a0a0c';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
+
+        particles.forEach(p => {
+            p.y += p.vy;
+            if (p.y > canvas.height) p.y = -10;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+            ctx.fill();
+        });
+        requestAnimationFrame(animate);
+    }
+    animate();
+}
+window.addEventListener('load', initMenuAnimation);
