@@ -700,9 +700,15 @@ class Game {
         this.active = true;
         this.updateUI();
         requestAnimationFrame(() => this.loop());
-        document.getElementById('main-menu').style.display = 'none';
-        document.getElementById('ui-layer').style.display = 'flex';
-        document.getElementById('game-over').style.display = 'none';
+
+        const mainMenu = document.getElementById('main-menu');
+        if (mainMenu) mainMenu.style.display = 'none';
+
+        const uiLayer = document.getElementById('ui-layer');
+        if (uiLayer) uiLayer.style.display = 'flex';
+
+        const gameOver = document.getElementById('game-over');
+        if (gameOver) gameOver.style.display = 'none';
     }
 
     loop() {
