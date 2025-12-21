@@ -39,7 +39,7 @@
              <!-- Bottom HUD -->
              <div id="hud-bottom">
                 <div class="hud-group" id="weapon-display">
-                    <div class="slot weapon-slot" id="slot-weapon">⚔️</div>
+                    <div class="slot weapon-slot" id="slot-weapon" onclick="game.toggleThrow()">⚔️</div>
                     <span class="key-hint">WEAPON</span>
                 </div>
                 <div class="hud-group" id="skill-display">
@@ -76,8 +76,9 @@
             <div class="dpad">
                 <div class="btn btn-up" data-key="ArrowUp">▲</div>
                 <div class="btn btn-left" data-key="ArrowLeft">◀</div>
-                <div class="btn btn-down" data-key="ArrowDown">▼</div>
+                <div class="btn btn-wait" data-key="Space">⏳</div>
                 <div class="btn btn-right" data-key="ArrowRight">▶</div>
+                <div class="btn btn-down" data-key="ArrowDown">▼</div>
             </div>
         </div>
     </div>

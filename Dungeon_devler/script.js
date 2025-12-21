@@ -657,41 +657,123 @@ class Game {
         this.keys = {};
         window.addEventListener('keydown', e => {
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'w', 'a', 's', 'd', 'q', '1', '2', '3', 't', 'Enter'].includes(e.key)) e.preventDefault();
-            this.keys[e.key] = true;
-
-            if (this.inputState === 'TARGETING') {
-                if (e.key === 'Escape') {
-                    this.inputState = 'NORMAL';
-                    this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "CANCEL", '#aaa');
-                } else if (e.key === 'Enter' || e.key === ' ') {
-                    this.throwItem();
-                } else {
-                    let dx=0, dy=0;
-                    if (e.key==='ArrowUp'||e.key==='w') dy=-1;
-                    else if (e.key==='ArrowDown'||e.key==='s') dy=1;
-                    else if (e.key==='ArrowLeft'||e.key==='a') dx=-1;
-                    else if (e.key==='ArrowRight'||e.key==='d') dx=1;
-
-                    this.targetCursor.x += dx;
-                    this.targetCursor.y += dy;
-                }
-                return;
-            }
-
-            if (e.key === 't') {
-                this.inputState = 'TARGETING';
-                this.targetCursor = {x: this.player.x, y: this.player.y};
-                this.selectedSlot = 0; // Default to first slot or currently highlighted
-                this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "AIM!", '#fff');
-                return;
-            }
-
-            this.player.inputBuffer = e.key;
-            if (e.key === 'q') this.player.useSkill();
-            if (['1','2','3'].includes(e.key)) this.useItem(parseInt(e.key)-1);
-            if (e.key === 'Escape') this.togglePause();
+            this.handleInput(e.key);
         });
         window.addEventListener('keyup', e => this.keys[e.key] = false);
+
+        this.bindTouchControls();
+    }
+
+    bindTouchControls() {
+        // D-Pad Bindings
+        document.querySelectorAll('.btn').forEach(btn => {
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const key = btn.getAttribute('data-key');
+                this.handleInput(key);
+            }, {passive: false});
+
+            // Mouse click for testing
+            btn.addEventListener('mousedown', (e) => {
+                const key = btn.getAttribute('data-key');
+                this.handleInput(key);
+            });
+        });
+
+        // Swipe Detection
+        let tsX, tsY;
+        this.canvas.addEventListener('touchstart', (e) => {
+            tsx = e.changedTouches[0].screenX;
+            tsy = e.changedTouches[0].screenY;
+        }, {passive: false});
+
+        this.canvas.addEventListener('touchend', (e) => {
+            let teX = e.changedTouches[0].screenX;
+            let teY = e.changedTouches[0].screenY;
+
+            let dx = teX - tsX;
+            let dy = teY - tsy;
+
+            if (Math.abs(dx) > 30 || Math.abs(dy) > 30) {
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    this.handleInput(dx > 0 ? 'ArrowRight' : 'ArrowLeft');
+                } else {
+                    this.handleInput(dy > 0 ? 'ArrowDown' : 'ArrowUp');
+                }
+            } else {
+                // Tap might trigger targeting click if we implement touch targeting
+            }
+        }, {passive: false});
+    }
+
+    handleInput(key) {
+        if (!this.active || this.paused) {
+            if (key === 'Escape') this.togglePause();
+            return;
+        }
+
+        if (this.inputState === 'TARGETING') {
+            if (key === 'Escape') {
+                this.inputState = 'NORMAL';
+                this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "CANCEL", '#aaa');
+            } else if (key === 'Enter' || key === ' ' || key === 't' || key === 'Space') {
+                this.throwItem();
+            } else {
+                let dx=0, dy=0;
+                if (key==='ArrowUp'||key==='w') dy=-1;
+                else if (key==='ArrowDown'||key==='s') dy=1;
+                else if (key==='ArrowLeft'||key==='a') dx=-1;
+                else if (key==='ArrowRight'||key==='d') dx=1;
+
+                this.targetCursor.x += dx;
+                this.targetCursor.y += dy;
+            }
+            return;
+        }
+
+        if (key === 't') {
+            this.toggleThrow();
+            return;
+        }
+
+        if (key === ' ' || key === 'Space') {
+            this.wait();
+            return;
+        }
+
+        if (key === 'q') {
+            this.player.useSkill();
+            return;
+        }
+
+        if (['1','2','3'].includes(key)) {
+            this.useItem(parseInt(key)-1);
+            return;
+        }
+
+        if (key === 'Escape') {
+            this.togglePause();
+            return;
+        }
+
+        // Movement
+        this.player.inputBuffer = key;
+    }
+
+    toggleThrow() {
+        if (this.inputState === 'NORMAL') {
+            this.inputState = 'TARGETING';
+            this.targetCursor = {x: this.player.x, y: this.player.y};
+            this.selectedSlot = 0;
+            this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "AIM!", '#fff');
+        } else {
+            this.throwItem(); // Clicking again throws
+        }
+    }
+
+    wait() {
+        this.addText(this.player.x*TILE_SIZE, this.player.y*TILE_SIZE, "WAIT", '#aaa');
+        this.processTurn();
     }
 
     togglePause() { this.paused = !this.paused; document.getElementById('pause-menu').style.display = this.paused ? 'flex' : 'none'; }

@@ -216,17 +216,30 @@ canvas#gameCanvas {
         display: flex;
     }
     #hud-bottom {
-        bottom: 25px;
-        right: 20px; /* Move HUD to right on mobile */
+        bottom: 20px;
+        right: 10px;
         left: auto;
         transform: none;
+        flex-direction: column-reverse;
+        align-items: flex-end;
+        gap: 15px;
+        pointer-events: none; /* Container doesn't block, children do */
+    }
+    #hud-bottom > * {
+        pointer-events: auto;
+    }
+    .key-hint {
+        display: none;
+    }
+    #inventory-display {
+        flex-direction: column-reverse;
     }
 }
 
 .dpad {
     display: grid;
     grid-template-columns: repeat(3, 55px);
-    grid-template-rows: repeat(2, 55px);
+    grid-template-rows: repeat(3, 55px);
     gap: 6px;
     pointer-events: auto;
 }
@@ -261,14 +274,23 @@ canvas#gameCanvas {
     grid-row: 2;
 }
 
-.btn-down {
+.btn-wait {
     grid-column: 2;
     grid-row: 2;
+    font-size: 16px;
+    font-weight: bold;
+    color: var(--accent);
+    border-color: var(--accent-dim);
 }
 
 .btn-right {
     grid-column: 3;
     grid-row: 2;
+}
+
+.btn-down {
+    grid-column: 2;
+    grid-row: 3;
 }
 
 /* Menus */
